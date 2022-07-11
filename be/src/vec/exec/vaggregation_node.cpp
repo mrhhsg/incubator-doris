@@ -1076,8 +1076,6 @@ Status AggregationNode::_merge_with_serialized_key(Block* block) {
             },
             _agg_data._aggregated_method_variant);
 
-    std::unique_ptr<char[]> deserialize_buffer(new char[_total_size_of_aggregate_states]);
-
     for (int i = 0; i < _aggregate_evaluators.size(); ++i) {
         DCHECK(_aggregate_evaluators[i]->input_exprs_ctxs().size() == 1 &&
                _aggregate_evaluators[i]->input_exprs_ctxs()[0]->root()->is_slot_ref());
@@ -1089,20 +1087,26 @@ Status AggregationNode::_merge_with_serialized_key(Block* block) {
                 column = ((ColumnNullable*)column.get())->get_nested_column_ptr();
             }
 
+            std::unique_ptr<char[]> deserialize_buffer_vec(
+                    new char[_total_size_of_aggregate_states * rows]);
             for (int j = 0; j < rows; ++j) {
                 VectorBufferReader buffer_reader(((ColumnString*)(column.get()))->get_data_at(j));
-                _create_agg_status(deserialize_buffer.get());
+                _create_agg_status(deserialize_buffer_vec.get() +
+                                   j * _total_size_of_aggregate_states);
 
                 _aggregate_evaluators[i]->function()->deserialize(
-                        deserialize_buffer.get() + _offsets_of_aggregate_states[i], buffer_reader,
-                        &_agg_arena_pool);
+                        deserialize_buffer_vec.get() + j * _total_size_of_aggregate_states +
+                                _offsets_of_aggregate_states[i],
+                        buffer_reader, &_agg_arena_pool);
+            }
 
+            for (int j = 0; j < rows; ++j) {
+                VectorBufferReader buffer_reader(((ColumnString*)(column.get()))->get_data_at(j));
                 _aggregate_evaluators[i]->function()->merge(
                         places.data()[j] + _offsets_of_aggregate_states[i],
-                        deserialize_buffer.get() + _offsets_of_aggregate_states[i],
+                        deserialize_buffer_vec.get() + j * _total_size_of_aggregate_states +
+                                _offsets_of_aggregate_states[i],
                         &_agg_arena_pool);
-
-                _destroy_agg_status(deserialize_buffer.get());
             }
         } else {
             _aggregate_evaluators[i]->execute_batch_add(block, _offsets_of_aggregate_states[i],
