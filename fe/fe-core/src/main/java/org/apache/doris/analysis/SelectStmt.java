@@ -1067,6 +1067,26 @@ public class SelectStmt extends QueryStmt {
 
             if (!groupByClause.isGroupByExtension()) {
                 groupingExprs.removeIf(Expr::isConstant);
+                ArrayList<Expr> slotExprs = new ArrayList<>();
+                ArrayList<Expr> otherExprs = new ArrayList<>();
+                for (Expr expr : groupingExprs) {
+                    if (expr instanceof SlotRef) {
+                        slotExprs.add(expr);
+                    } else {
+                        otherExprs.add(expr);
+                    }
+                }
+
+                ArrayList<Expr> removeExprs = new ArrayList<>();
+                for (Expr otherExpr : otherExprs) {
+                    for (Expr slotExpr : slotExprs) {
+                        if (otherExpr.islinearRelationship(((SlotRef) slotExpr).getSlotId())) {
+                            removeExprs.add(otherExpr);
+                            break;
+                        }
+                    }
+                }
+                groupingExprs.removeAll(removeExprs);
             }
 
             if (groupingInfo != null) {
