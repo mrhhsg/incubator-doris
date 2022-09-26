@@ -31,8 +31,7 @@ namespace doris::vectorized {
 class MergeSorterState {
 public:
     MergeSorterState(const RowDescriptor& row_desc, int64_t offset)
-            : unsorted_block(
-                      new Block(VectorizedUtils::create_columns_with_type_and_name(row_desc))),
+            : unsorted_block(new Block(VectorizedUtils::create_empty_block(row_desc))),
               _offset(offset) {}
 
     ~MergeSorterState() = default;
