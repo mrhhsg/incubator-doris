@@ -287,8 +287,8 @@ Status NewOlapScanNode::_init_scanners(std::list<VScanner*>* scanners) {
                     1, (int)(tablet->tablet_footprint() / (config::doris_scan_range_max_mb << 20)));
         }
 
-        if (_scan_keys.size() > size_based_scanners_per_tablet && _scan_keys.is_mergeable()) {
-            auto scan_keys = _scan_keys.merge(size_based_scanners_per_tablet);
+        if (_scan_keys.size() > size_based_scanners_per_tablet) {
+            auto scan_keys = _scan_keys.get_merged_keys();
             RETURN_IF_ERROR(scan_keys.get_key_range(&cond_ranges));
         } else {
             RETURN_IF_ERROR(_scan_keys.get_key_range(&cond_ranges));
