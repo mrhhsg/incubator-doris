@@ -110,9 +110,6 @@ public:
 
     void convert_to_fixed_value();
 
-    // split this range to small ranges which are step_size.
-    std::vector<ColumnValueRange> split(size_t count);
-
     void convert_to_range_value();
 
     bool has_intersection(ColumnValueRange<primitive_type>& range);
@@ -316,6 +313,8 @@ using ColumnValueRangeType =
                      ColumnValueRange<TYPE_DECIMALV2>, ColumnValueRange<TYPE_BOOLEAN>,
                      ColumnValueRange<TYPE_HLL>, ColumnValueRange<TYPE_DECIMAL32>,
                      ColumnValueRange<TYPE_DECIMAL64>, ColumnValueRange<TYPE_DECIMAL128>>;
+
+class OlapScanKeys;
 class OlapScanKeys {
 public:
     OlapScanKeys()
@@ -325,8 +324,18 @@ public:
               _has_range_value(false),
               _begin_include(true),
               _end_include(true),
-              _is_convertible(true),
-              _is_mergeable(false) {}
+              _is_convertible(true) {}
+
+    OlapScanKeys(const OlapScanKeys& src)
+            : _begin_scan_keys(src._begin_scan_keys),
+              _end_scan_keys(src._end_scan_keys),
+              _index_of_max_size_range(src._index_of_max_size_range),
+              _max_size_of_range(src._max_size_of_range),
+              _max_scan_key_num(src._max_scan_key_num),
+              _has_range_value(src._has_range_value),
+              _begin_include(src._begin_include),
+              _end_include(src._end_include),
+              _is_convertible(src._is_convertible) {}
 
     template <PrimitiveType primitive_type>
     Status extend_scan_key(ColumnValueRange<primitive_type>& range, int32_t max_scan_key_num,
@@ -336,8 +345,6 @@ public:
     Status extend_scan_key(ColumnValueRange<primitive_type>& range, bool* exact_value) {
         return extend_scan_key(range, _max_scan_key_num, exact_value);
     }
-
-    Status extend_scan_splitted_keys(std::vector<ColumnValueRangeType>& ranges);
 
     Status get_key_range(std::vector<std::unique_ptr<OlapScanRange>>* key_range);
 
@@ -378,10 +385,6 @@ public:
 
     void set_is_convertible(bool is_convertible) { _is_convertible = is_convertible; }
 
-    bool is_mergeable() const { return _is_mergeable; }
-
-    OlapScanKeys merge(size_t to_ranges_count);
-
     // now, only use in UT
     static std::string to_print_key(const OlapTuple& scan_keys) {
         std::stringstream sstream;
@@ -389,10 +392,21 @@ public:
         return sstream.str();
     }
 
+    OlapScanKeys get_merged_keys() {
+        if (_merged_keys) return *_merged_keys;
+        _merged_keys.reset(new OlapScanKeys);
+        _merge(_merged_keys.get());
+        return *_merged_keys;
+    }
+
+private:
+    void _merge(OlapScanKeys* scan_keys);
+
 private:
     std::vector<OlapTuple> _begin_scan_keys;
     std::vector<OlapTuple> _end_scan_keys;
     std::vector<ColumnValueRangeType> _column_ranges;
+    std::unique_ptr<OlapScanKeys> _merged_keys;
     size_t _index_of_max_size_range;
     size_t _max_size_of_range;
     int32_t _max_scan_key_num;
@@ -400,10 +414,6 @@ private:
     bool _begin_include;
     bool _end_include;
     bool _is_convertible;
-
-    // if tablet is too same, there is no need too many scan keys,
-    // we should merge the scan keys
-    bool _is_mergeable;
 };
 
 template <PrimitiveType primitive_type>
@@ -568,61 +578,6 @@ void ColumnValueRange<primitive_type>::convert_to_fixed_value() {
     if (_high_op == FILTER_LESS_OR_EQUAL) {
         _fixed_values.insert(high_value);
     }
-}
-
-template <>
-std::vector<ColumnValueRange<PrimitiveType::TYPE_STRING>>
-ColumnValueRange<PrimitiveType::TYPE_STRING>::split(size_t count);
-
-template <>
-std::vector<ColumnValueRange<PrimitiveType::TYPE_CHAR>>
-ColumnValueRange<PrimitiveType::TYPE_CHAR>::split(size_t count);
-
-template <>
-std::vector<ColumnValueRange<PrimitiveType::TYPE_VARCHAR>>
-ColumnValueRange<PrimitiveType::TYPE_VARCHAR>::split(size_t count);
-
-template <>
-std::vector<ColumnValueRange<PrimitiveType::TYPE_HLL>>
-ColumnValueRange<PrimitiveType::TYPE_HLL>::split(size_t count);
-
-template <>
-std::vector<ColumnValueRange<PrimitiveType::TYPE_DECIMALV2>>
-ColumnValueRange<PrimitiveType::TYPE_DECIMALV2>::split(size_t count);
-
-template <>
-std::vector<ColumnValueRange<PrimitiveType::TYPE_LARGEINT>>
-ColumnValueRange<PrimitiveType::TYPE_LARGEINT>::split(size_t count);
-
-template <PrimitiveType primitive_type>
-std::vector<ColumnValueRange<primitive_type>> ColumnValueRange<primitive_type>::split(
-        size_t count) {
-    if (!is_fixed_value_range()) {
-        LOG(FATAL) << "should be converted to fixed value range";
-    }
-
-    // Incrementing boolean is denied in C++17, So we use int as bool type
-    using type = std::conditional_t<std::is_same<bool, CppType>::value, int, CppType>;
-    type low_value = *_fixed_values.begin();
-    type high_value = *_fixed_values.rbegin();
-
-    int64_t step = int64_t((high_value - low_value + count - 1) / count);
-    std::vector<ColumnValueRange> splitted;
-
-    for (auto v = low_value; count > 0;) {
-        ColumnValueRange<primitive_type> range(_column_name, _precision, _scale);
-        range.set_contain_null(_contain_null);
-        range.add_range(FILTER_LARGER_OR_EQUAL, v);
-        if (count > 1) {
-            v += step;
-            range.add_range(FILTER_LESS, v);
-        } else {
-            range.add_range(FILTER_LESS_OR_EQUAL, high_value);
-        }
-        count--;
-        splitted.emplace_back(range);
-    }
-    return splitted;
 }
 
 template <PrimitiveType primitive_type>
@@ -954,7 +909,6 @@ Status OlapScanKeys::extend_scan_key(ColumnValueRange<primitive_type>& range,
                     _max_size_of_range = size;
                     _index_of_max_size_range = _column_ranges.size();
                 }
-                _is_mergeable = true;
             }
         }
     }
