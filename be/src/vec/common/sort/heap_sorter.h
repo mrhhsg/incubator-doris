@@ -69,8 +69,6 @@ public:
 
     Status get_next(RuntimeState* state, Block* block, bool* eos) override;
 
-    bool reuse_mem() override { return false; }
-
     static constexpr size_t HEAP_SORT_THRESHOLD = 1024;
 
 private:

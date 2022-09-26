@@ -166,7 +166,6 @@ void sort_block(Block& src_block, Block& dest_block, const SortDescription& desc
                     i, src_block.get_by_position(i).column->permute(perm, limit));
         }
     }
-    src_block.clear_column_data();
 }
 
 void stable_get_permutation(const Block& block, const SortDescription& description,

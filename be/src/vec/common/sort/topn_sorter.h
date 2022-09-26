@@ -36,14 +36,13 @@ public:
 
     Status get_next(RuntimeState* state, Block* block, bool* eos) override;
 
-    bool reuse_mem() override { return !_materialize_sort_exprs; }
-
     static constexpr size_t TOPN_SORT_THRESHOLD = 256;
 
 private:
     Status _do_sort(Block* block);
 
     std::unique_ptr<MergeSorterState> _state;
+    const RowDescriptor& _row_desc;
 };
 
 } // namespace doris::vectorized

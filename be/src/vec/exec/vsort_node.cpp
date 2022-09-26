@@ -48,13 +48,16 @@ Status VSortNode::init(const TPlanNode& tnode, RuntimeState* state) {
         !row_desc.has_varlen_slots()) {
         _sorter.reset(new HeapSorter(_vsort_exec_exprs, _limit, _offset, _pool, _is_asc_order,
                                      _nulls_first, row_desc));
+        reuse_mem = false;
     } else if (_limit > 0 && row_desc.has_varlen_slots() && _limit > 0 &&
                _limit + _offset < TopNSorter::TOPN_SORT_THRESHOLD) {
         _sorter.reset(new TopNSorter(_vsort_exec_exprs, _limit, _offset, _pool, _is_asc_order,
                                      _nulls_first, row_desc));
+        reuse_mem = true;
     } else {
         _sorter.reset(new FullSorter(_vsort_exec_exprs, _limit, _offset, _pool, _is_asc_order,
                                      _nulls_first, row_desc));
+        reuse_mem = true;
     }
 
     _sorter->init_profile(_runtime_profile.get());
@@ -93,7 +96,7 @@ Status VSortNode::open(RuntimeState* state) {
             RETURN_IF_ERROR(_sorter->append_block(upstream_block.get()));
             RETURN_IF_CANCELLED(state);
             RETURN_IF_ERROR(state->check_query_state("vsort, while sorting input."));
-            if (!_sorter->reuse_mem()) {
+            if (!reuse_mem) {
                 upstream_block.reset(new Block());
             }
         }

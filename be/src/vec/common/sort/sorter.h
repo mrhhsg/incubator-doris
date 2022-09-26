@@ -31,10 +31,9 @@ namespace doris::vectorized {
 class MergeSorterState {
 public:
     MergeSorterState(const RowDescriptor& row_desc, int64_t offset)
-            : unsorted_block(new MutableBlock(
-                      VectorizedUtils::create_empty_columnswithtypename(row_desc))),
-              _offset(offset),
-              _row_desc(row_desc) {}
+            : unsorted_block(
+                      new Block(VectorizedUtils::create_columns_with_type_and_name(row_desc))),
+              _offset(offset) {}
 
     ~MergeSorterState() = default;
 
@@ -42,20 +41,14 @@ public:
 
     Status merge_sort_read(doris::RuntimeState* state, doris::vectorized::Block* block, bool* eos);
 
-    void reset_block() {
-        unsorted_block.reset(
-                new MutableBlock(VectorizedUtils::create_empty_columnswithtypename(_row_desc)));
-    }
-
     std::priority_queue<MergeSortCursor> priority_queue;
     std::vector<MergeSortCursorImpl> cursors;
-    std::unique_ptr<MutableBlock> unsorted_block;
+    std::unique_ptr<Block> unsorted_block;
     std::vector<Block> sorted_blocks;
     uint64_t num_rows = 0;
 
 private:
     int64_t _offset;
-    const RowDescriptor& _row_desc;
 };
 
 class Sorter {
@@ -82,8 +75,6 @@ public:
     virtual Status prepare_for_read() = 0;
 
     virtual Status get_next(RuntimeState* state, Block* block, bool* eos) = 0;
-
-    virtual bool reuse_mem() = 0;
 
 protected:
     Status partial_sort(Block& src_block, Block& dest_block);
@@ -116,8 +107,6 @@ public:
     Status prepare_for_read() override;
 
     Status get_next(RuntimeState* state, Block* block, bool* eos) override;
-
-    bool reuse_mem() override { return true; }
 
 private:
     bool _reach_limit() {
