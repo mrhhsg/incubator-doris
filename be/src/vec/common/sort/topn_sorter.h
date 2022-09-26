@@ -30,18 +30,16 @@ public:
 
     ~TopNSorter() override = default;
 
-    Status append_block(Block* block) override;
+    Status append_block(Block* block, bool* mem_reuse) override;
 
     Status prepare_for_read() override;
 
     Status get_next(RuntimeState* state, Block* block, bool* eos) override;
 
-    bool reuse_mem() override { return !_materialize_sort_exprs; }
-
     static constexpr size_t TOPN_SORT_THRESHOLD = 256;
 
 private:
-    Status _do_sort(Block* block);
+    Status _do_sort(Block* block, bool* mem_reuse);
 
     std::unique_ptr<MergeSorterState> _state;
 };
