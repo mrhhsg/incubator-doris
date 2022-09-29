@@ -72,7 +72,7 @@ public:
 
     template <typename V>
     bool load(V* v) {
-        read_pod_binary(v, _buffer);
+        read_pod_binary(*v, _buffer);
         return true;
     }
 
