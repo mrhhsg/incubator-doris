@@ -1310,17 +1310,11 @@ void AggregationNode::_update_memusage_with_serialized_key() {
 }
 
 void AggregationNode::_close_with_serialized_key() {
-    std::visit(
-            [&](auto&& agg_method) -> void {
-                auto& data = agg_method.data;
-                data.for_each_mapped([&](auto& mapped) {
-                    if (mapped) {
-                        _destroy_agg_status(mapped);
-                        mapped = nullptr;
-                    }
-                });
-            },
-            _agg_data._aggregated_method_variant);
+    auto iter = _aggregate_data_container->begin();
+    while (iter != _aggregate_data_container->end()) {
+        _destroy_agg_status(iter.get_aggregate_data());
+        ++iter;
+    }
     release_tracker();
 }
 
