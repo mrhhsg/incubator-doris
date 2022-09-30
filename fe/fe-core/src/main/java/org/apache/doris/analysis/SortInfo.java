@@ -52,6 +52,7 @@ public class SortInfo {
 
     private List<Expr> orderingExprs;
     private final List<Boolean> isAscOrder;
+    private List<Expr> origOrderingExprs;
     // True if "NULLS FIRST", false if "NULLS LAST", null if not specified.
     private final List<Boolean> nullsFirstParams;
     // Subset of ordering exprs that are materialized. Populated in
@@ -115,6 +116,10 @@ public class SortInfo {
             SlotDescriptor slotDesc = sortTupleDesc.getSlots().get(i);
             slotDesc.setSourceExpr(sortTupleSlotExprs.get(i));
         }
+    }
+
+    public List<Expr> getOrigOrderingExprs() {
+        return origOrderingExprs;
     }
 
     public List<Expr> getOrderingExprs() {
@@ -252,6 +257,9 @@ public class SortInfo {
             }
         }
 
+        // backup before substitute orderingExprs
+        origOrderingExprs = orderingExprs;
+
         // The ordering exprs are evaluated against the sort tuple, so they must reflect the
         // materialization decision above.
         substituteOrderingExprs(substOrderBy, analyzer);
@@ -282,9 +290,13 @@ public class SortInfo {
         List<SlotDescriptor> slots = analyzer.changeSlotToNullableOfOuterJoinedTuples();
         ExprSubstitutionMap substOrderBy = new ExprSubstitutionMap();
         for (Expr origOrderingExpr : orderingExprs) {
+            SlotRef origSlotRef = origOrderingExpr.getSrcSlotRef();
             SlotDescriptor materializedDesc = analyzer.addSlotDescriptor(sortTupleDesc);
             materializedDesc.initFromExpr(origOrderingExpr);
             materializedDesc.setIsMaterialized(true);
+            if (origSlotRef != null) {
+                materializedDesc.setColumn(origSlotRef.getColumn());
+            }
             SlotRef materializedRef = new SlotRef(materializedDesc);
             substOrderBy.put(origOrderingExpr, materializedRef);
             materializedOrderingExprs.add(origOrderingExpr);

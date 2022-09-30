@@ -50,6 +50,8 @@ Status BetaRowsetReader::init(RowsetReaderContext* read_context) {
     StorageReadOptions read_options;
     read_options.stats = _stats;
     read_options.push_down_agg_type_opt = _context->push_down_agg_type_opt;
+    read_options.rowset_id = _rowset->rowset_id();
+    read_options.tablet_id = _rowset->rowset_meta()->tablet_id();
     if (read_context->lower_bound_keys != nullptr) {
         for (int i = 0; i < read_context->lower_bound_keys->size(); ++i) {
             read_options.key_ranges.emplace_back(&read_context->lower_bound_keys->at(i),
@@ -147,8 +149,10 @@ Status BetaRowsetReader::init(RowsetReaderContext* read_context) {
     read_options.use_page_cache = read_context->use_page_cache;
     read_options.tablet_schema = read_context->tablet_schema;
     read_options.record_rowids = read_context->record_rowids;
+    read_options.use_topn_opt = read_context->use_topn_opt;
     read_options.read_orderby_key_reverse = read_context->read_orderby_key_reverse;
     read_options.read_orderby_key_columns = read_context->read_orderby_key_columns;
+    read_options.runtime_state = read_context->runtime_state;
 
     // load segments
     RETURN_NOT_OK(SegmentLoader::instance()->load_segments(

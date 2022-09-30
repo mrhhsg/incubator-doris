@@ -352,6 +352,7 @@ public:
 
     void update_max_version_schema(const TabletSchemaSPtr& tablet_schema);
 
+    RowsetSharedPtr get_rowset(const RowsetId& rowset_id);
 private:
     Status _init_once_action();
     void _print_missed_versions(const std::vector<Version>& missed_versions) const;

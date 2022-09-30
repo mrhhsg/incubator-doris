@@ -139,6 +139,8 @@ private:
 
     void _update_max_row(const vectorized::Block* block);
 
+    void _insert_rowids(vectorized::Block* block, uint16_t* sel_rowid_idx, uint16_t selected_size);
+
 private:
     class BitmapRangeIterator;
     class BackwardBitmapRangeIterator;
@@ -195,6 +197,8 @@ private:
     StorageReadOptions _opts;
     // make a copy of `_opts.column_predicates` in order to make local changes
     std::vector<ColumnPredicate*> _col_predicates;
+
+    std::shared_ptr<ColumnPredicate> _runtime_predicate {nullptr};
 
     // row schema of the key to seek
     // only used in `_get_row_ranges_by_keys`

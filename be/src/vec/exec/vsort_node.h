@@ -55,6 +55,10 @@ protected:
     virtual void debug_string(int indentation_level, std::stringstream* out) const override;
 
 private:
+    // used to refill block with ColumnConst when contains rowid column,
+    // since some column missed
+    void _rebuild_block(Block* block);
+
     // Number of rows to skip.
     int64_t _offset;
 
@@ -63,11 +67,17 @@ private:
     std::vector<bool> _is_asc_order;
     std::vector<bool> _nulls_first;
 
+    bool _use_topn_opt = false;
+
     bool reuse_mem;
 
     std::unique_ptr<Sorter> _sorter;
 
+    const TupleDescriptor* _scan_node_tuple_desc = nullptr;
+
     static constexpr size_t ACCUMULATED_PARTIAL_SORT_THRESHOLD = 256;
+
+    RuntimeState* _runtime_state = nullptr;
 };
 
 } // namespace doris::vectorized

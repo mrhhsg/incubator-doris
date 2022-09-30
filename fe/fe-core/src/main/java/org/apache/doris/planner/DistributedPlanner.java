@@ -1246,6 +1246,12 @@ public class DistributedPlanner {
         exchNode.setMergeInfo(node.getSortInfo());
         exchNode.setOffset(offset);
 
+        // Set nodes info for the fecond phase fetch data by rowids
+        if (node.isUseTopNTwoPhaseOptimize()) {
+            exchNode.createNodesInfo();
+            exchNode.setResolvedTupleExprs(node.getResolvedTupleExprs());
+        }
+
         // Child nodes should not process the offset. If there is a limit,
         // the child nodes need only return (offset + limit) rows.
         SortNode childSortNode = (SortNode) childFragment.getPlanRoot();

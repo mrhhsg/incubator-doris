@@ -41,6 +41,10 @@ bool is_date_type(PrimitiveType type);
 bool is_string_type(PrimitiveType type);
 bool has_variable_type(PrimitiveType type);
 
+// NOTICE:signed integers always return bigint
+// used for adapt data in varaint column's subcolumns
+PrimitiveType get_primitive_type(vectorized::TypeIndex v_type);
+
 // Returns the byte size of 'type'  Returns 0 for variable length types.
 int get_byte_size(PrimitiveType type);
 // Returns the byte size of type when in a tuple

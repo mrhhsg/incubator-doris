@@ -77,6 +77,9 @@ Status Sorter::partial_sort(Block& src_block, Block& dest_block) {
     if (_materialize_sort_exprs) {
         auto output_tuple_expr_ctxs = _vsort_exec_exprs.sort_tuple_slot_expr_ctxs();
         std::vector<int> valid_column_ids(output_tuple_expr_ctxs.size());
+        if (src_block.try_get_by_name(BeConsts::ROWID_COL)) {
+            valid_column_ids.push_back(src_block.columns() - 1); 
+        }
         for (int i = 0; i < output_tuple_expr_ctxs.size(); ++i) {
             RETURN_IF_ERROR(output_tuple_expr_ctxs[i]->execute(&src_block, &valid_column_ids[i]));
         }

@@ -485,6 +485,8 @@ struct TOlapScanNode {
   10: optional i64 sort_limit
   11: optional bool enable_unique_key_merge_on_write
   12: optional TPushAggOp push_down_agg_type_opt
+  13: optional bool use_topn_opt
+  14: optional list<Exprs.TExpr> ordering_exprs
 }
 
 struct TEqJoinCondition {
@@ -641,6 +643,7 @@ struct TSortNode {
 
   // Indicates whether the imposed limit comes DEFAULT_ORDER_BY_LIMIT.           
   6: optional bool is_default_limit                                              
+  7: optional bool use_topn_opt
 }
 
 enum TAnalyticWindowType {
@@ -786,6 +789,8 @@ struct TExchangeNode {
   2: optional TSortInfo sort_info
   // This is tHe number of rows to skip before returning results
   3: optional i64 offset
+  // used for second phase fetch
+  4: optional Descriptors.TPaloNodesInfo nodes_info
 }
 
 struct TOlapRewriteNode {

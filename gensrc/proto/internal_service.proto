@@ -525,6 +525,23 @@ message PTabletWriteSlaveDoneResult {
     optional PStatus status = 1;
 };
 
+message PMultiGetRequest {
+    message RowId {
+        optional int64 tablet_id = 1;
+        optional string rowset_id = 2;
+        optional uint64 segment_id = 3;
+        optional uint64 ordinal_id = 4;
+    };
+    repeated RowId rowids = 1;
+    optional PTupleDescriptor desc = 2;
+    repeated PSlotDescriptor slots = 3;
+};
+
+message PMultiGetResponse {
+    optional PBlock block = 1;
+    optional PStatus status = 2;
+};
+
 service PBackendService {
     rpc transmit_data(PTransmitDataParams) returns (PTransmitDataResult);
     rpc transmit_data_by_http(PEmptyRequest) returns (PTransmitDataResult);
@@ -558,5 +575,6 @@ service PBackendService {
     rpc hand_shake(PHandShakeRequest) returns (PHandShakeResponse);
     rpc request_slave_tablet_pull_rowset(PTabletWriteSlaveRequest) returns (PTabletWriteSlaveResult);
     rpc response_slave_tablet_pull_rowset(PTabletWriteSlaveDoneRequest) returns (PTabletWriteSlaveDoneResult);
+    rpc multiget_data(PMultiGetRequest) returns (PMultiGetResponse);
 };
 

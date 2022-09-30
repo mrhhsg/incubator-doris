@@ -48,8 +48,19 @@ protected:
 
     Status _init_scanners(std::list<VScanner*>* scanners) override;
 
+    std::unique_ptr<vectorized::Block> _allocate_block(const TupleDescriptor* desc, size_t sz) override;
 private:
     Status _build_key_ranges_and_filters();
+
+    bool _maybe_prune_columns();
+
+    bool is_pruned_column(int32_t col_unique_id);
+
+    // iterate through conjuncts tre
+    void _iterate_conjuncts_tree(const VExpr* conjunct_expr_root, std::function<void(const VExpr*)> fn);
+
+    // get all slot ref column unique ids
+    void _collect_conjuncts_slot_column_unique_ids(const VExpr* expr);
 
 private:
     TOlapScanNode _olap_scan_node;
@@ -58,6 +69,8 @@ private:
     std::vector<TCondition> _olap_filters;
 
     std::unique_ptr<MemTracker> _scanner_mem_tracker;
+
+    std::set<int32_t> _pruned_column_ids;
 
 private:
     std::unique_ptr<RuntimeProfile> _segment_profile;

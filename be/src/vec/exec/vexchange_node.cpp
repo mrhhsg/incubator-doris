@@ -22,6 +22,9 @@
 #include "runtime/thread_context.h"
 #include "vec/runtime/vdata_stream_mgr.h"
 #include "vec/runtime/vdata_stream_recvr.h"
+#include "exec/rowid_fetcher.h"
+#include "common/consts.h"
+#include "util/defer_op.h"
 
 namespace doris::vectorized {
 VExchangeNode::VExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
@@ -42,8 +45,14 @@ Status VExchangeNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
 
     RETURN_IF_ERROR(_vsort_exec_exprs.init(tnode.exchange_node.sort_info, _pool));
+    RETURN_IF_ERROR(_vsort_exec_exprs_backup.init(tnode.exchange_node.sort_info, _pool));
     _is_asc_order = tnode.exchange_node.sort_info.is_asc_order;
     _nulls_first = tnode.exchange_node.sort_info.nulls_first;
+
+    if (tnode.exchange_node.__isset.nodes_info) {
+        _nodes_info = _pool->add(new DorisNodesInfo(tnode.exchange_node.nodes_info));
+    }
+    _scan_node_tuple_desc = state->desc_tbl().get_tuple_descriptor(tnode.olap_scan_node.tuple_id);
     return Status::OK();
 }
 
@@ -81,6 +90,47 @@ Status VExchangeNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* e
     return Status::NotSupported("Not Implemented VExchange Node::get_next scalar");
 }
 
+Status VExchangeNode::second_phase_fetch_data(RuntimeState* state, Block* final_block) {
+    auto row_id_col =  final_block->try_get_by_name(BeConsts::ROWID_COL);
+    if (row_id_col != nullptr && final_block->rows() > 0) {
+        MonotonicStopWatch watch;
+        watch.start();
+        RowIDFetcher id_fetcher(_scan_node_tuple_desc);
+        RETURN_IF_ERROR(id_fetcher.init(_nodes_info));
+        vectorized::Block b(_scan_node_tuple_desc->slots(), final_block->rows());
+        auto tmp_block = MutableBlock::build_mutable_block(&b);
+        // fetch will sort block by sequence of ROWID_COL
+        RETURN_IF_ERROR(id_fetcher.fetch(row_id_col->column, &tmp_block));
+        b.swap(tmp_block.to_block());
+
+        // materialize
+        if (_vsort_exec_exprs_backup.need_materialize_tuple()) {
+            // TOO trick here??
+            Defer _derfer([&](){ _vsort_exec_exprs_backup.close(state); });
+            RETURN_IF_ERROR(_vsort_exec_exprs_backup.prepare(
+                state, {state->desc_tbl(), {0}, {0}}, _row_descriptor));
+            RETURN_IF_ERROR(_vsort_exec_exprs_backup.open(state));
+            Block new_block;
+            auto output_tuple_expr_ctxs = _vsort_exec_exprs_backup.sort_tuple_slot_expr_ctxs();
+            std::vector<int> valid_column_ids(output_tuple_expr_ctxs.size());
+            for (int i = 0; i < output_tuple_expr_ctxs.size(); ++i) {
+                RETURN_IF_ERROR(output_tuple_expr_ctxs[i]->execute(&b, &valid_column_ids[i]));
+            }
+            for (auto column_id : valid_column_ids) {
+                new_block.insert(b.get_by_position(column_id));
+            }
+            // last rowid column
+            new_block.insert(b.get_by_position(b.columns() - 1));
+            final_block->swap(new_block);
+        } else {
+            final_block->swap(b);
+        } 
+        LOG(INFO) << "fetch_id finished, cost(ms):" << watch.elapsed_time() / 1000 / 1000; 
+    }
+    return Status::OK();
+}
+
+
 Status VExchangeNode::get_next(RuntimeState* state, Block* block, bool* eos) {
     INIT_AND_SCOPE_GET_NEXT_SPAN(state->get_tracer(), _get_next_span, "VExchangeNode::get_next");
     SCOPED_TIMER(runtime_profile()->total_time_counter());
@@ -96,6 +146,7 @@ Status VExchangeNode::get_next(RuntimeState* state, Block* block, bool* eos) {
         }
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     }
+    RETURN_IF_ERROR(second_phase_fetch_data(state, block)); 
     return status;
 }
 

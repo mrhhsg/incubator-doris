@@ -134,6 +134,7 @@ struct TTupleIsNullPredicate {
 struct TSlotRef {
   1: required Types.TSlotId slot_id
   2: required Types.TTupleId tuple_id
+  3: required i32 col_unique_id
 }
 
 struct TStringLiteral {

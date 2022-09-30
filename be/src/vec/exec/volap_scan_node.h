@@ -73,6 +73,16 @@ private:
     Status normalize_conjuncts();
     Status build_key_ranges_and_filters();
 
+    bool _maybe_prune_columns();
+
+    bool is_pruned_column(int32_t col_unique_id);
+
+    // iterate through conjuncts tre
+    void _iterate_conjuncts_tree(const VExpr* conjunct_expr_root, std::function<void(const VExpr*)> fn);
+
+    // get all slot ref column unique ids
+    void _collect_conjuncts_slot_column_unique_ids(const VExpr* expr);
+
     template <bool IsFixed, PrimitiveType PrimitiveType, typename ChangeFixedValueRangeFunc>
     static Status change_value_range(ColumnValueRange<PrimitiveType>& range, void* value,
                                      const ChangeFixedValueRangeFunc& func,
@@ -133,6 +143,8 @@ private:
                                                                const VSlotRef**, VExpr**)>& checker,
                                       SlotDescriptor** slot_desc, ColumnValueRangeType** range);
 
+    std::unique_ptr<vectorized::Block> _allocate_block(const TupleDescriptor* desc, size_t sz);
+
     bool _should_push_down_binary_predicate(
             VectorizedFnCall* fn_call, VExprContext* expr_ctx, StringRef* constant_val,
             int* slot_ref_child, const std::function<bool(const std::string&)>& fn_checker);
@@ -156,6 +168,9 @@ private:
     // collection slots
     std::vector<SlotDescriptor*> _collection_slots;
 
+    // column uniq ids of conjucts
+    std::set<int32_t> _conjuct_column_unique_ids;
+
     bool _eos;
 
     // column -> ColumnValueRange map
@@ -175,6 +190,8 @@ private:
     // push down functions to storage engine
     // only support scalar functions, now just support like / not like
     std::vector<FunctionFilter> _push_down_functions;
+
+    std::set<int32_t> _pruned_column_ids;
 
     // Pool for storing allocated scanner objects.  We don't want to use the
     // runtime pool to ensure that the scanner objects are deleted before this

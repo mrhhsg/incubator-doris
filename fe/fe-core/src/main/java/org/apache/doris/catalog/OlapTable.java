@@ -1588,11 +1588,12 @@ public class OlapTable extends Table {
     }
 
     public boolean getEnableLightSchemaChange() {
-        if (tableProperty != null) {
-            return tableProperty.getUseSchemaLightChange();
-        }
-        // property is set false by default
-        return false;
+        // if (tableProperty != null) {
+        //     return tableProperty.getUseSchemaLightChange();
+        // }
+        // // property is set false by default
+        // return false;
+        return true;
     }
 
     public void setEnableLightSchemaChange(boolean enableLightSchemaChange) {

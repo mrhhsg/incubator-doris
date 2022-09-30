@@ -875,6 +875,8 @@ CONF_Bool(enable_new_load_scan_node, "false");
 // Temp config. True to use new file scanner. Will remove after fully test.
 CONF_Bool(enable_new_file_scanner, "false");
 
+CONF_Int32(multi_get_per_batch, "10");
+
 #ifdef BE_TEST
 // test s3
 CONF_String(test_s3_resource, "resource");

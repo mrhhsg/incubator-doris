@@ -19,6 +19,7 @@
 #include <queue>
 
 #include "common/status.h"
+#include "common/consts.h"
 #include "vec/common/sort/vsort_exec_exprs.h"
 #include "vec/core/block.h"
 #include "vec/core/sort_block.h"
@@ -74,6 +75,10 @@ public:
     virtual Status prepare_for_read() = 0;
 
     virtual Status get_next(RuntimeState* state, Block* block, bool* eos) = 0;
+
+    // for topn runtime predicate
+    const SortDescription& get_sort_description() { return _sort_description; }
+    virtual Field get_top_value() { return {}; }
 
 protected:
     Status partial_sort(Block& src_block, Block& dest_block);

@@ -36,6 +36,9 @@ Status HeapSorter::append_block(Block* block) {
         if (_vsort_exec_exprs.need_materialize_tuple()) {
             auto output_tuple_expr_ctxs = _vsort_exec_exprs.sort_tuple_slot_expr_ctxs();
             std::vector<int> valid_column_ids(output_tuple_expr_ctxs.size());
+            if (block->try_get_by_name(BeConsts::ROWID_COL)) {
+                valid_column_ids.push_back(block->columns() - 1); 
+            }
             for (int i = 0; i < output_tuple_expr_ctxs.size(); ++i) {
                 RETURN_IF_ERROR(output_tuple_expr_ctxs[i]->execute(block, &valid_column_ids[i]));
             }
@@ -126,6 +129,17 @@ Status HeapSorter::get_next(RuntimeState* state, Block* block, bool* eos) {
     _return_block.swap(*block);
     *eos = true;
     return Status::OK();
+}
+
+Field HeapSorter::get_top_value() {
+    Field field;
+    // get field from first sort column of top row
+    if (_heap->size() >= _heap_size) {
+        auto & top = _heap->top();
+        top.sort_columns()[0]->get(top.row_id(), field);
+    }
+
+    return field;
 }
 
 void HeapSorter::_do_filter(HeapSortCursorBlockView& block_view, size_t num_rows) {

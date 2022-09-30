@@ -26,6 +26,7 @@
 #include "gen_cpp/Types_types.h"               // for TUniqueId
 #include "runtime/datetime_value.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_predicate.h"
 #include "util/threadpool.h"
 
 namespace doris {
@@ -80,6 +81,8 @@ public:
         return _ready_to_execute.load() && !_is_cancelled.load();
     }
 
+    vectorized::RuntimePredicate& get_runtime_predicate() { return _runtime_predicate; }
+
 public:
     TUniqueId query_id;
     DescriptorTbl* desc_tbl;
@@ -117,6 +120,8 @@ private:
     // And all fragments of this query will start execution when this is set to true.
     std::atomic<bool> _ready_to_execute {false};
     std::atomic<bool> _is_cancelled {false};
+
+    vectorized::RuntimePredicate _runtime_predicate;
 };
 
 } // namespace doris

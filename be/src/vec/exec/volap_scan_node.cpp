@@ -324,7 +324,7 @@ void VOlapScanNode::transfer_thread(RuntimeState* state) {
             block_per_scanner;
 
     for (int i = 0; i < pre_block_count; ++i) {
-        auto block = new Block(_tuple_desc->slots(), _block_size);
+        auto block = _allocate_block(_tuple_desc, _block_size).release();
         _free_blocks.emplace_back(block);
         _buffered_bytes += block->allocated_bytes();
     }
@@ -735,6 +735,82 @@ Status VOlapScanNode::build_key_ranges_and_filters() {
     return Status::OK();
 }
 
+std::unique_ptr<vectorized::Block> VOlapScanNode::_allocate_block(const TupleDescriptor* desc, size_t sz) {
+    vectorized::Block* block = new vectorized::Block;
+    for (auto slot : desc->slots()) {
+        // avoid allocate pruned columns
+        if (_pruned_column_ids.count(slot->col_unique_id())) {
+            continue;
+        }
+        auto column_ptr = slot->get_empty_mutable_column();
+        column_ptr->reserve(sz);
+        block->insert(ColumnWithTypeAndName(std::move(column_ptr), slot->get_data_type_ptr(),
+                                    slot->col_name()));
+    }
+    return std::unique_ptr<vectorized::Block>(block);
+}
+
+bool VOlapScanNode::is_pruned_column(int32_t col_unique_id) {
+    return _pruned_column_ids.find(col_unique_id) != _pruned_column_ids.end();
+}
+
+bool VOlapScanNode::_maybe_prune_columns() {
+    // If last column is rowid column, we should try our best to prune seeking columns
+    if (_tuple_desc->slots().back()->col_name() != BeConsts::ROWID_COL) {
+        return false;
+    }
+    // an id collection of ordering column id, key column id, conjuncts column id
+    std::set<int32_t> output_columns;
+
+    // ordering column ids
+    if (!_olap_scan_node.ordering_exprs.empty()) {
+        for (auto i = 0; i < _olap_scan_node.ordering_exprs.size(); ++i) {
+            auto t_orderby_expr = _olap_scan_node.ordering_exprs[i];
+            for (TExprNode& t_orderby_expr_node : t_orderby_expr.nodes) {
+                auto col_id = t_orderby_expr_node.slot_ref.col_unique_id;
+                if (col_id < 0) {
+                    continue;
+                }
+                output_columns.emplace(col_id);
+            }
+        }
+    }
+
+    std::set<int32_t> output_tuple_column_unique_ids;
+    for (auto slot : _tuple_desc->slots()) {
+        if (slot->col_unique_id() < 0) {
+            continue;
+        }
+        if (slot->is_key()) {
+            // must include key columns
+            output_columns.emplace(slot->col_unique_id());
+        }
+        output_tuple_column_unique_ids.emplace(slot->col_unique_id());
+    }
+
+    for (int32_t cid : _conjuct_column_unique_ids) {
+        output_columns.emplace(cid); 
+    }
+
+    // get pruned column ids    
+    std::set_difference(output_tuple_column_unique_ids.begin(), output_tuple_column_unique_ids.end(),
+                    output_columns.begin(), output_columns.end(),
+                    std::inserter(_pruned_column_ids, _pruned_column_ids.end()));
+    if (!_pruned_column_ids.empty()) {
+        // set slot column id mapping
+        size_t x = 0;
+        if (_vconjunct_ctx_ptr) {
+            for (auto slot : _tuple_desc->slots()) {
+                if (_pruned_column_ids.count(slot->col_unique_id())) {
+                    continue;
+                }
+                (*_vconjunct_ctx_ptr)->set_slot_id_mapping(slot->id(), x++);
+            }
+        }
+    }
+    return !_pruned_column_ids.empty();
+}
+
 Status VOlapScanNode::start_scan(RuntimeState* state) {
     RETURN_IF_CANCELLED(state);
 
@@ -744,6 +820,17 @@ Status VOlapScanNode::start_scan(RuntimeState* state) {
     if (_eos) {
         return Status::OK();
     }
+
+    auto collect_fn = [this](const VExpr* expr) {
+        _collect_conjuncts_slot_column_unique_ids(expr);
+    };
+    if (_vconjunct_ctx_ptr && *_vconjunct_ctx_ptr) {
+        _iterate_conjuncts_tree((*_vconjunct_ctx_ptr)->root(), collect_fn);
+    }
+
+    // prune some columns, some of them will be fetched
+    // in exchanged node, may seem trick here?
+    _maybe_prune_columns();
 
     VLOG_CRITICAL << "BuildKeyRangesAndFilters";
     RETURN_IF_ERROR(build_key_ranges_and_filters());
@@ -858,6 +945,30 @@ Status VOlapScanNode::change_value_range(ColumnValueRange<PrimitiveType>& temp_r
     }
 
     return Status::OK();
+}
+
+// iterate through conjuncts tree
+void VOlapScanNode::_iterate_conjuncts_tree(const VExpr* conjunct_expr_root,
+                        std::function<void(const VExpr*)> fn) {
+    fn(conjunct_expr_root);
+    for (const VExpr* child : conjunct_expr_root->children()) {
+        _iterate_conjuncts_tree(child, fn); 
+    }
+    return;
+}
+
+// get all slot ref column unique ids
+void VOlapScanNode::_collect_conjuncts_slot_column_unique_ids(const VExpr* expr) {
+    if (!expr->is_slot_ref()) {
+        return;
+    }
+    auto slot_ref = reinterpret_cast<const VSlotRef*>(expr);
+    for (const auto* slot_desc : _tuple_desc->slots()) {
+        if (slot_desc->id() == slot_ref->slot_id() && slot_desc->col_unique_id() > 0) {
+            _conjuct_column_unique_ids.emplace(slot_desc->col_unique_id());
+        }
+    }
+    return;
 }
 
 bool VOlapScanNode::is_key_column(const std::string& key_name) {
@@ -1122,8 +1233,7 @@ Block* VOlapScanNode::_alloc_block(bool& get_free_block) {
     }
 
     get_free_block = false;
-
-    auto block = new Block(_tuple_desc->slots(), _block_size);
+    auto block = _allocate_block(_tuple_desc, _block_size).release();
     _buffered_bytes += block->allocated_bytes();
     return block;
 }
@@ -1417,6 +1527,7 @@ bool VOlapScanNode::_is_predicate_acting_on_slot(
         return false;
     }
     *slot_desc = entry->second.first;
+    _conjuct_column_unique_ids.emplace((*slot_desc)->col_unique_id());
     DCHECK(child_contains_slot != nullptr);
     if (child_contains_slot->type().type != (*slot_desc)->type().type) {
         if (!ignore_cast(*slot_desc, child_contains_slot)) {

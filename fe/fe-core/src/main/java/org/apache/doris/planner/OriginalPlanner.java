@@ -28,11 +28,14 @@ import org.apache.doris.analysis.QueryStmt;
 import org.apache.doris.analysis.SelectStmt;
 import org.apache.doris.analysis.SlotDescriptor;
 import org.apache.doris.analysis.SlotId;
+import org.apache.doris.analysis.SlotRef;
 import org.apache.doris.analysis.StatementBase;
 import org.apache.doris.analysis.StorageBackend;
 import org.apache.doris.analysis.TupleDescriptor;
+import org.apache.doris.catalog.Column;
 import org.apache.doris.catalog.PrimitiveType;
 import org.apache.doris.catalog.ScalarType;
+import org.apache.doris.catalog.Type;
 import org.apache.doris.common.UserException;
 import org.apache.doris.common.util.VectorizedUtil;
 import org.apache.doris.qe.ConnectContext;
@@ -194,6 +197,9 @@ public class OriginalPlanner extends Planner {
         analyzer.getDescTbl().computeMemLayout();
         singleNodePlan.finalize(analyzer);
 
+        // check and set flag for topn detail query opt
+        checkTopnOpt(singleNodePlan);
+
         if (queryOptions.num_nodes == 1) {
             // single-node execution; we're almost done
             singleNodePlan = addUnassignedConjuncts(analyzer, singleNodePlan);
@@ -208,7 +214,8 @@ public class OriginalPlanner extends Planner {
         // Push sort node down to the bottom of olapscan.
         // Because the olapscan must be in the end. So get the last two nodes.
         if (VectorizedUtil.isVectorized()) {
-            pushSortToOlapScan();
+            pushSortToOlapScan(analyzer);
+            pushOrderByExprsToOlapScan();
         }
 
         // Optimize the transfer of query statistic when query doesn't contain limit.
@@ -330,10 +337,23 @@ public class OriginalPlanner extends Planner {
         topPlanFragment.getPlanRoot().resetTupleIds(Lists.newArrayList(fileStatusDesc.getId()));
     }
 
+
+    private void injectColumnIdSlot(Analyzer analyzer, TupleDescriptor tupleDesc) {
+        SlotDescriptor slotDesc = analyzer.getDescTbl().addSlotDescriptor(tupleDesc);
+        String name = Column.ROWID_COL;
+        Column col = new Column(name, Type.STRING, false, null, false, "",
+                                        "rowid column");
+        slotDesc.setType(Type.STRING);
+        slotDesc.setColumn(col);
+        slotDesc.setIsNullable(false);
+        slotDesc.setIsMaterialized(true);
+    }
+
     /**
      * Push sort down to olap scan.
      */
-    private void pushSortToOlapScan() {
+    private void pushSortToOlapScan(Analyzer analyzer) {
+        boolean addedRowIdColumn = false;
         for (PlanFragment fragment : fragments) {
             PlanNode node = fragment.getPlanRoot();
             PlanNode parent = null;
@@ -350,6 +370,18 @@ public class OriginalPlanner extends Planner {
             }
             SortNode sortNode = (SortNode) parent;
             OlapScanNode scanNode = (OlapScanNode) node;
+
+            // optimize topn:
+            // 1. read rowids
+            // 2. fetch by rowids
+            if (!addedRowIdColumn && VectorizedUtil.isVectorized() && sortNode.isUseTopNTwoPhaseOptimize()
+                    && scanNode.getTupleDesc().getSlots().size() > 4) {
+                fragment.setParallelExecNum(1);
+                injectColumnIdSlot(analyzer, scanNode.getTupleDesc());
+                injectColumnIdSlot(analyzer, sortNode.getSortInfo().getSortTupleDescriptor());
+                addedRowIdColumn = true;
+            }
+
             if (!scanNode.checkPushSort(sortNode)) {
                 continue;
             }
@@ -361,6 +393,50 @@ public class OriginalPlanner extends Planner {
             }
             scanNode.setSortInfo(sortNode.getSortInfo());
             scanNode.getSortInfo().setSortTupleSlotExprs(sortNode.resolvedTupleExprs);
+        }
+    }
+
+    private void pushOrderByExprsToOlapScan() {
+        for (PlanFragment fragment : fragments) {
+            PlanNode node = fragment.getPlanRoot();
+            PlanNode parent = null;
+
+            // OlapScanNode is the last node.
+            // So, just get the last two node and check if they are SortNode and OlapScan.
+            while (node.getChildren().size() != 0) {
+                parent = node;
+                node = node.getChildren().get(0);
+            }
+
+            if (!(node instanceof OlapScanNode) || !(parent instanceof SortNode)) {
+                continue;
+            }
+            SortNode sortNode = (SortNode) parent;
+            OlapScanNode scanNode = (OlapScanNode) node;
+            scanNode.setOrderingExprs(sortNode.getSortInfo().getOrigOrderingExprs());
+        }
+    }
+
+    /**
+     * optimize for topn query like: SELECT * FROM t1 WHERE a>100 ORDER BY b,c LIMIT 100
+     * the pre-requirement is as follows:
+     * 1. only contains SortNode + OlapScanNode
+     * 2. limit > 0
+     * 3. first expression of order by is a table column
+     */
+    private void checkTopnOpt(PlanNode node) {
+        if (node instanceof SortNode && node.getChildren().size() == 1) {
+            SortNode sortNode = (SortNode) node;
+            PlanNode child = sortNode.getChild(0);
+            if (child instanceof OlapScanNode && sortNode.getLimit() > 0
+                    && sortNode.getSortInfo().getOrderingExprs().size() > 0) {
+                Expr firstSortExpr = sortNode.getSortInfo().getOrderingExprs().get(0);
+                if (firstSortExpr instanceof SlotRef && !firstSortExpr.getType().isStringType()) {
+                    OlapScanNode scanNode = (OlapScanNode) child;
+                    sortNode.setUseTopnOpt(true);
+                    scanNode.setUseTopnOpt(true);
+                }
+            }
         }
     }
 

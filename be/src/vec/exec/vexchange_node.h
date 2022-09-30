@@ -22,6 +22,9 @@
 #include "exec/exec_node.h"
 #include "vec/common/sort/vsort_exec_exprs.h"
 
+#include "runtime/descriptors.h"
+#include "exec/tablet_info.h"           // DorisNodesInfo
+
 namespace doris {
 namespace vectorized {
 class VDataStreamRecvr;
@@ -41,6 +44,9 @@ public:
     // Status collect_query_statistics(QueryStatistics* statistics) override;
     void set_num_senders(int num_senders) { _num_senders = num_senders; }
 
+    // final materializtion, used only in topn node
+    Status second_phase_fetch_data(RuntimeState* state, Block* final_block);
+
 private:
     int _num_senders;
     bool _is_merging;
@@ -53,6 +59,12 @@ private:
     VSortExecExprs _vsort_exec_exprs;
     std::vector<bool> _is_asc_order;
     std::vector<bool> _nulls_first;
+
+    // for fetch data by rowids
+    DorisNodesInfo* _nodes_info = nullptr;
+    const TupleDescriptor* _scan_node_tuple_desc;
+    // a backup exprs for _vsort_exec_exprs 
+    VSortExecExprs _vsort_exec_exprs_backup;
 };
 } // namespace vectorized
 } // namespace doris

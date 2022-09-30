@@ -78,6 +78,23 @@ Status NewOlapScanner::prepare(
                 _tablet_schema->append_column(TabletColumn(column_desc));
             }
         }
+
+        {
+            std::set<int32_t> exclude_read_column;
+            if (_output_tuple_desc->slots().back()->col_name() == BeConsts::ROWID_COL) {
+                // inject ROWID_COL
+                TabletColumn rowid_column; 
+                rowid_column.set_is_nullable(false);
+                rowid_column.set_name(BeConsts::ROWID_COL);
+                // avoid column reader init error
+                rowid_column.set_has_default_value(true);
+                // fake unique id
+                rowid_column.set_unique_id(INT32_MAX);
+                rowid_column.set_type(FieldType::OLAP_FIELD_TYPE_STRING);
+                _tablet_schema->append_column(rowid_column);
+            }
+        } 
+        
         {
             std::shared_lock rdlock(_tablet->get_header_lock());
             const RowsetSharedPtr rowset = _tablet->rowset_with_max_version();
@@ -253,15 +270,20 @@ Status NewOlapScanner::_init_tablet_reader_params(
         }
     }
 
+    _tablet_reader_params.use_topn_opt = ((NewOlapScanNode*)_parent)->_olap_scan_node.use_topn_opt;
+
     return Status::OK();
 }
 
 Status NewOlapScanner::_init_return_columns(bool need_seq_col) {
+    NewOlapScanNode* olap_parent = (NewOlapScanNode*)_parent;
     for (auto slot : _output_tuple_desc->slots()) {
         if (!slot->is_materialized()) {
             continue;
         }
-
+        if (olap_parent->is_pruned_column(slot->col_unique_id())) {
+            continue;
+        }
         int32_t index = slot->col_unique_id() >= 0
                                 ? _tablet_schema->field_index(slot->col_unique_id())
                                 : _tablet_schema->field_index(slot->col_name());

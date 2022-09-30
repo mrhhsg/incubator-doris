@@ -99,7 +99,7 @@ set(EXEC_FILES
     table_connector.cpp
     json_scanner.cpp
     assert_num_rows_node.cpp
-
+    rowid_fetcher.cpp
 )
 if (WITH_MYSQL)
     set(EXEC_FILES
