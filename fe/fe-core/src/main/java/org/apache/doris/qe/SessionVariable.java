@@ -234,7 +234,7 @@ public class SessionVariable implements Serializable, Writable {
 
     // max memory used on every backend.
     @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT)
-    public long maxExecMemByte = 2147483648L;
+    public long maxExecMemByte = 34359738368L;
 
     @VariableMgr.VarAttr(name = ENABLE_SPILLING)
     public boolean enableSpilling = false;
@@ -254,7 +254,7 @@ public class SessionVariable implements Serializable, Writable {
     //        but may cause rpc failed when cluster has less BE
     // Whether this switch is turned on depends on the BE number
     @VariableMgr.VarAttr(name = ENABLE_SINGLE_DISTINCT_COLUMN_OPT)
-    public boolean enableSingleDistinctColumnOpt = false;
+    public boolean enableSingleDistinctColumnOpt = true;
 
     // Set sqlMode to empty string
     @VariableMgr.VarAttr(name = SQL_MODE, needForward = true)
@@ -376,7 +376,7 @@ public class SessionVariable implements Serializable, Writable {
      * 1 means disable this feature
      */
     @VariableMgr.VarAttr(name = PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM)
-    public int parallelExecInstanceNum = 1;
+    public int parallelExecInstanceNum = 16;
 
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT, needForward = true)
     public boolean enableInsertStrict = true;
@@ -394,7 +394,7 @@ public class SessionVariable implements Serializable, Writable {
     public boolean forwardToMaster = true;
 
     @VariableMgr.VarAttr(name = LOAD_MEM_LIMIT)
-    public long loadMemLimit = 2 * 1024 * 1024 * 1024L; // 2GB as default
+    public long loadMemLimit = 32 * 1024 * 1024 * 1024L; // 2GB as default
 
     @VariableMgr.VarAttr(name = USE_V2_ROLLUP)
     public boolean useV2Rollup = false;
@@ -540,10 +540,10 @@ public class SessionVariable implements Serializable, Writable {
     public boolean enableSingleReplicaInsert = false;
 
     @VariableMgr.VarAttr(name = ENABLE_FUNCTION_PUSHDOWN)
-    public boolean enableFunctionPushdown;
+    public boolean enableFunctionPushdown = true;
 
     @VariableMgr.VarAttr(name = ENABLE_LOCAL_EXCHANGE)
-    public boolean enableLocalExchange = false;
+    public boolean enableLocalExchange = true;
 
 
     /**
