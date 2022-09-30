@@ -301,12 +301,23 @@ void VOlapScanNode::transfer_thread(RuntimeState* state) {
     _total_assign_num = 0;
     _nice = 18 + std::max(0, 2 - (int)_volap_scanners.size() / 5);
 
+    auto agg_type_opt = _olap_scan_node.__isset.push_down_agg_type_opt
+                                ? _olap_scan_node.push_down_agg_type_opt
+                                : TPushAggOp::NONE;
     auto doris_scanner_row_num =
             _limit == -1 ? config::doris_scanner_row_num
                          : std::min(static_cast<int64_t>(config::doris_scanner_row_num), _limit);
     _block_size = _limit == -1 ? state->batch_size()
                                : std::min(static_cast<int64_t>(state->batch_size()), _limit);
     auto block_per_scanner = (doris_scanner_row_num + (_block_size - 1)) / _block_size;
+
+    if (agg_type_opt == TPushAggOp::COUNT) {
+        block_per_scanner = 1;
+    } else if (agg_type_opt == TPushAggOp::MINMAX) {
+        block_per_scanner = 1;
+        _block_size = 10;
+    }
+
     auto pre_block_count =
             std::min(_volap_scanners.size(),
                      static_cast<size_t>(config::doris_scanner_thread_pool_thread_num)) *
