@@ -20,11 +20,11 @@ set -eo pipefail
 
 curdir="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 
-DORIS_HOME="$(
+SELECTDB_HOME="$(
     cd "${curdir}/.."
     pwd
 )"
-export DORIS_HOME
+export SELECTDB_HOME
 
 PID_DIR="$(
     cd "${curdir}"
@@ -56,7 +56,7 @@ if [[ -f "${pidfile}" ]]; then
 
     pidcomm="$(ps -p "${pid}" -o comm=)"
     # check if pid process is backend process
-    if [[ "doris_be" != "${pidcomm}" ]]; then
+    if [[ "selectdb_be" != "${pidcomm}" ]]; then
         echo "ERROR: pid process may not be be. "
         exit 1
     fi

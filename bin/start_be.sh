@@ -51,11 +51,11 @@ while true; do
     esac
 done
 
-DORIS_HOME="$(
+SELECTDB_HOME="$(
     cd "${curdir}/.."
     pwd
 )"
-export DORIS_HOME
+export SELECTDB_HOME
 
 MAX_MAP_COUNT="$(sysctl -n vm.max_map_count)"
 if [[ "${MAX_MAP_COUNT}" -lt 2000000 ]]; then
@@ -64,15 +64,15 @@ if [[ "${MAX_MAP_COUNT}" -lt 2000000 ]]; then
 fi
 
 # add libs to CLASSPATH
-for f in "${DORIS_HOME}/lib"/*.jar; do
-    if [[ -z "${DORIS_JNI_CLASSPATH_PARAMETER}" ]]; then
-        export DORIS_JNI_CLASSPATH_PARAMETER="${f}"
+for f in "${SELECTDB_HOME}/lib"/*.jar; do
+    if [[ -z "${SELECTDB_JNI_CLASSPATH_PARAMETER}" ]]; then
+        export SELECTDB_JNI_CLASSPATH_PARAMETER="${f}"
     else
-        export DORIS_JNI_CLASSPATH_PARAMETER="${f}:${DORIS_JNI_CLASSPATH_PARAMETER}"
+        export SELECTDB_JNI_CLASSPATH_PARAMETER="${f}:${SELECTDB_JNI_CLASSPATH_PARAMETER}"
     fi
 done
-# DORIS_JNI_CLASSPATH_PARAMETER is used to configure additional jar path to jvm. e.g. -Djava.class.path=$DORIS_HOME/lib/java-udf.jar
-export DORIS_JNI_CLASSPATH_PARAMETER="-Djava.class.path=${DORIS_JNI_CLASSPATH_PARAMETER}"
+# SELECTDB_JNI_CLASSPATH_PARAMETER is used to configure additional jar path to jvm. e.g. -Djava.class.path=$SELECTDB_HOME/lib/java-udf.jar
+export SELECTDB_JNI_CLASSPATH_PARAMETER="-Djava.class.path=${SELECTDB_JNI_CLASSPATH_PARAMETER}"
 
 jdk_version() {
     local java_cmd="${1}"
@@ -131,8 +131,8 @@ setup_java_env || true
 # UDF_RUNTIME_DIR
 # LOG_DIR
 # PID_DIR
-export UDF_RUNTIME_DIR="${DORIS_HOME}/lib/udf-runtime"
-export LOG_DIR="${DORIS_HOME}/log"
+export UDF_RUNTIME_DIR="${SELECTDB_HOME}/lib/udf-runtime"
+export LOG_DIR="${SELECTDB_HOME}/log"
 PID_DIR="$(
     cd "${curdir}"
     pwd
@@ -140,13 +140,13 @@ PID_DIR="$(
 export PID_DIR
 
 # set odbc conf path
-export ODBCSYSINI="${DORIS_HOME}/conf"
+export ODBCSYSINI="${SELECTDB_HOME}/conf"
 
 # support utf8 for oracle database
 export NLS_LANG='AMERICAN_AMERICA.AL32UTF8'
 
 #filter known leak for lsan.
-export LSAN_OPTIONS="suppressions=${DORIS_HOME}/conf/asan_suppr.conf"
+export LSAN_OPTIONS="suppressions=${SELECTDB_HOME}/conf/asan_suppr.conf"
 
 while read -r line; do
     envline="$(echo "${line}" |
@@ -158,11 +158,11 @@ while read -r line; do
     if [[ "${envline}" == *"="* ]]; then
         eval 'export "${envline}"'
     fi
-done <"${DORIS_HOME}/conf/be.conf"
+done <"${SELECTDB_HOME}/conf/be.conf"
 
-if [[ -e "${DORIS_HOME}/bin/palo_env.sh" ]]; then
+if [[ -e "${SELECTDB_HOME}/bin/palo_env.sh" ]]; then
     # shellcheck disable=1091
-    source "${DORIS_HOME}/bin/palo_env.sh"
+    source "${SELECTDB_HOME}/bin/palo_env.sh"
 fi
 
 if [[ ! -d "${LOG_DIR}" ]]; then
@@ -186,7 +186,7 @@ if [[ -f "${pidfile}" ]]; then
     fi
 fi
 
-chmod 755 "${DORIS_HOME}/lib/doris_be"
+chmod 755 "${SELECTDB_HOME}/lib/selectdb_be"
 echo "start time: $(date)" >>"${LOG_DIR}/be.out"
 
 if [[ ! -f '/bin/limit3' ]]; then
@@ -205,11 +205,11 @@ export ASAN_OPTIONS=symbolize=1:abort_on_error=1:disable_coredump=0:unmap_shadow
 export UBSAN_OPTIONS=print_stacktrace=1
 
 ## set hdfs conf
-export LIBHDFS3_CONF="${DORIS_HOME}/conf/hdfs-site.xml"
+export LIBHDFS3_CONF="${SELECTDB_HOME}/conf/hdfs-site.xml"
 
 if [[ "${RUN_DAEMON}" -eq 1 ]]; then
-    nohup ${LIMIT:+${LIMIT}} "${DORIS_HOME}/lib/doris_be" "$@" >>"${LOG_DIR}/be.out" 2>&1 </dev/null &
+    nohup ${LIMIT:+${LIMIT}} "${SELECTDB_HOME}/lib/selectdb_be" "$@" >>"${LOG_DIR}/be.out" 2>&1 </dev/null &
 else
-    export DORIS_LOG_TO_STDERR=1
-    ${LIMIT:+${LIMIT}} "${DORIS_HOME}/lib/doris_be" "$@" 2>&1 </dev/null
+    export SELECTDB_LOG_TO_STDERR=1
+    ${LIMIT:+${LIMIT}} "${SELECTDB_HOME}/lib/selectdb_be" "$@" 2>&1 </dev/null
 fi

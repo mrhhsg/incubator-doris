@@ -66,11 +66,11 @@ while true; do
     esac
 done
 
-DORIS_HOME="$(
+SELECTDB_HOME="$(
     cd "${curdir}/.."
     pwd
 )"
-export DORIS_HOME
+export SELECTDB_HOME
 
 # export env variables from fe.conf
 #
@@ -78,7 +78,7 @@ export DORIS_HOME
 # LOG_DIR
 # PID_DIR
 export JAVA_OPTS="-Xmx1024m"
-export LOG_DIR="${DORIS_HOME}/log"
+export LOG_DIR="${SELECTDB_HOME}/log"
 PID_DIR="$(
     cd "${curdir}"
     pwd
@@ -95,11 +95,11 @@ while read -r line; do
     if [[ "${envline}" == *"="* ]]; then
         eval 'export "${envline}"'
     fi
-done <"${DORIS_HOME}/conf/fe.conf"
+done <"${SELECTDB_HOME}/conf/fe.conf"
 
-if [[ -e "${DORIS_HOME}/bin/palo_env.sh" ]]; then
+if [[ -e "${SELECTDB_HOME}/bin/palo_env.sh" ]]; then
     # shellcheck disable=1091
-    source "${DORIS_HOME}/bin/palo_env.sh"
+    source "${SELECTDB_HOME}/bin/palo_env.sh"
 fi
 
 if [[ -z "${JAVA_HOME}" ]]; then
@@ -162,10 +162,10 @@ echo "using java version ${java_version}" >>"${LOG_DIR}/fe.out"
 echo "${final_java_opt}" >>"${LOG_DIR}/fe.out"
 
 # add libs to CLASSPATH
-for f in "${DORIS_HOME}/lib"/*.jar; do
+for f in "${SELECTDB_HOME}/lib"/*.jar; do
     CLASSPATH="${f}:${CLASSPATH}"
 done
-export CLASSPATH="${CLASSPATH}:${DORIS_HOME}/lib:${DORIS_HOME}/conf"
+export CLASSPATH="${CLASSPATH}:${SELECTDB_HOME}/lib:${SELECTDB_HOME}/conf"
 
 pidfile="${PID_DIR}/fe.pid"
 
