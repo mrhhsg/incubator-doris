@@ -121,7 +121,7 @@ public class Config extends ConfigBase {
      *      plugin install directory
      */
     @ConfField
-    public static String plugin_dir = System.getenv("DORIS_HOME") + "/plugins";
+    public static String plugin_dir = System.getenv("SELECTDB_HOME") + "/plugins";
 
     @ConfField(mutable = true, masterOnly = true)
     public static boolean plugin_enable = true;
@@ -177,7 +177,7 @@ public class Config extends ConfigBase {
      * 2. Safe (RAID)
      */
     @ConfField
-    public static String meta_dir = PaloFe.DORIS_HOME_DIR + "/doris-meta";
+    public static String meta_dir = PaloFe.DORIS_HOME_DIR + "/selectdb-meta";
 
     /**
      * temp dir is used to save intermediate results of some process, such as backup and restore process.

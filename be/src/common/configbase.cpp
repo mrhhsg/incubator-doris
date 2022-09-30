@@ -394,7 +394,7 @@ bool persist_config(const std::string& field, const std::string& value) {
     // lock to make sure only one thread can modify the be_custom.conf
     std::lock_guard<std::mutex> l(custom_conf_lock);
 
-    static const string conffile = string(getenv("DORIS_HOME")) + "/conf/be_custom.conf";
+    static const string conffile = string(getenv("SELECTDB_HOME")) + "/conf/be_custom.conf";
 
     Properties tmp_props;
     if (!tmp_props.load(conffile.c_str(), false)) {

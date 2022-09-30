@@ -22,7 +22,7 @@
 namespace doris {
 namespace config {
 // Dir of custom config file
-CONF_String(custom_config_dir, "${DORIS_HOME}/conf");
+CONF_String(custom_config_dir, "${SELECTDB_HOME}/conf");
 
 // cluster id
 CONF_Int32(cluster_id, "-1");
@@ -128,8 +128,8 @@ CONF_mInt32(download_low_speed_time, "300");
 CONF_Int32(sleep_one_second, "1");
 
 // log dir
-CONF_String(sys_log_dir, "${DORIS_HOME}/log");
-CONF_String(user_function_dir, "${DORIS_HOME}/lib/udf");
+CONF_String(sys_log_dir, "${SELECTDB_HOME}/log");
+CONF_String(user_function_dir, "${SELECTDB_HOME}/lib/udf");
 // INFO, WARNING, ERROR, FATAL
 CONF_String(sys_log_level, "INFO");
 // TIME-DAY, TIME-HOUR, SIZE-MB-nnn
@@ -204,7 +204,7 @@ CONF_mInt64(memory_limitation_per_thread_for_storage_migration_bytes, "100000000
 CONF_mInt32(cache_clean_interval, "1800");
 CONF_mInt32(disk_stat_monitor_interval, "5");
 CONF_mInt32(unused_rowset_monitor_interval, "30");
-CONF_String(storage_root_path, "${DORIS_HOME}/storage");
+CONF_String(storage_root_path, "${SELECTDB_HOME}/storage");
 
 // Config is used to check incompatible old format hdr_ format
 // whether doris uses strict way. When config is true, process will log fatal
@@ -468,7 +468,7 @@ CONF_mBool(disable_chunk_allocator_in_vec, "false");
 CONF_Bool(enable_quadratic_probing, "false");
 
 // for pprof
-CONF_String(pprof_profile_dir, "${DORIS_HOME}/log");
+CONF_String(pprof_profile_dir, "${SELECTDB_HOME}/log");
 
 // to forward compatibility, will be removed later
 CONF_mBool(enable_token_check, "true");
@@ -566,7 +566,7 @@ CONF_mInt32(es_http_timeout_ms, "5000");
 CONF_Int32(max_client_cache_size_per_host, "10");
 
 // Dir to save files downloaded by SmallFileMgr
-CONF_String(small_file_dir, "${DORIS_HOME}/lib/small_file/");
+CONF_String(small_file_dir, "${SELECTDB_HOME}/lib/small_file/");
 // path gc
 CONF_Bool(path_gc_check, "true");
 CONF_mInt32(path_gc_check_interval_second, "86400");

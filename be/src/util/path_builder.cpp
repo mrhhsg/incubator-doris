@@ -33,7 +33,7 @@ void PathBuilder::load_doris_home() {
         return;
     }
 
-    _s_doris_home = getenv("DORIS_HOME");
+    _s_doris_home = getenv("SELECTDB_HOME");
 }
 
 void PathBuilder::get_full_path(const std::string& path, std::string* full_path) {

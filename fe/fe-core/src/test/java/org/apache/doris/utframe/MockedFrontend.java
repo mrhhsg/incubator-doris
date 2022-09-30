@@ -57,7 +57,7 @@ import java.util.Map;
  * There will be 3 directories under running dir/:
  *      running dir/conf/
  *      running dir/log/
- *      running dir/doris-meta/
+ *      running dir/selectdb-meta/
  *
  *  All these 3 directories will be cleared first.
  *
@@ -66,7 +66,7 @@ public class MockedFrontend {
     public static final String FE_PROCESS = "fe";
 
     // the running dir of this mocked frontend.
-    // log/ doris-meta/ and conf/ dirs will be created under this dir.
+    // log/ selectdb-meta/ and conf/ dirs will be created under this dir.
     private String runningDir;
     // the min set of fe.conf.
     private static final Map<String, String> MIN_FE_CONF;
@@ -92,7 +92,7 @@ public class MockedFrontend {
 
     // init the fe process. This must be called before starting the frontend process.
     // 1. check if all necessary environment variables are set.
-    // 2. clear and create 3 dirs: runningDir/log/, runningDir/doris-meta/, runningDir/conf/
+    // 2. clear and create 3 dirs: runningDir/log/, runningDir/selectdb-meta/, runningDir/conf/
     // 3. init fe.conf
     //      The content of "fe.conf" is a merge set of input `feConf` and MIN_FE_CONF
     public void init(String runningDir, Map<String, String> feConf) throws EnvVarNotSetException, IOException {
@@ -113,7 +113,7 @@ public class MockedFrontend {
         // clear and create log dir
         createAndClearDir(runningDir + "/log/");
         // clear and create meta dir
-        createAndClearDir(runningDir + "/doris-meta/");
+        createAndClearDir(runningDir + "/selectdb-meta/");
         // clear and create conf dir
         createAndClearDir(runningDir + "/conf/");
         // init fe.conf
@@ -126,7 +126,7 @@ public class MockedFrontend {
         finalFeConf = Maps.newHashMap(MIN_FE_CONF);
         // these 2 configs depends on running dir, so set them here.
         finalFeConf.put("LOG_DIR", this.runningDir + "/log");
-        finalFeConf.put("meta_dir", this.runningDir + "/doris-meta");
+        finalFeConf.put("meta_dir", this.runningDir + "/selectdb-meta");
         finalFeConf.put("sys_log_dir", this.runningDir + "/log");
         finalFeConf.put("audit_log_dir", this.runningDir + "/log");
         finalFeConf.put("tmp_dir", this.runningDir + "/temp_dir");

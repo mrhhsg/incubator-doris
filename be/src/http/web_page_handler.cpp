@@ -44,7 +44,7 @@ namespace doris {
 static std::string s_html_content_type = "text/html";
 
 WebPageHandler::WebPageHandler(EvHttpServer* server) : _http_server(server) {
-    _www_path = std::string(getenv("DORIS_HOME")) + "/www/";
+    _www_path = std::string(getenv("SELECTDB_HOME")) + "/www/";
 
     // Make WebPageHandler to be static file handler, static files, e.g. css, png, will be handled by WebPageHandler.
     _http_server->register_static_file_handler(this);
@@ -153,7 +153,7 @@ static const std::string kMainTemplate = R"(
     </nav>
       {{^static_pages_available}}
       <div style="color: red">
-        <strong>Static pages not available. Make sure ${DORIS_HOME}/www/ exists and contains web static files.</strong>
+        <strong>Static pages not available. Make sure ${SELECTDB_HOME}/www/ exists and contains web static files.</strong>
       </div>
       {{/static_pages_available}}
       {{{content}}}

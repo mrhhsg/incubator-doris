@@ -271,8 +271,8 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (getenv("DORIS_HOME") == nullptr) {
-        fprintf(stderr, "you need set DORIS_HOME environment variable.\n");
+    if (getenv("SELECTDB_HOME") == nullptr) {
+        fprintf(stderr, "you need set SELECTDB_HOME environment variable.\n");
         exit(-1);
     }
 
@@ -306,7 +306,7 @@ int main(int argc, char** argv) {
     // the config in be_custom.conf will overwrite the config in be.conf
     // Must init custom config after init config, separately.
     // Because the path of custom config file is defined in be.conf
-    string conffile = string(getenv("DORIS_HOME")) + "/conf/be.conf";
+    string conffile = string(getenv("SELECTDB_HOME")) + "/conf/be.conf";
     if (!doris::config::init(conffile.c_str(), true, true, true)) {
         fprintf(stderr, "error read config file. \n");
         return -1;

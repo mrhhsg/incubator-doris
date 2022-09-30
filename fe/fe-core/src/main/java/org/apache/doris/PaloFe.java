@@ -57,7 +57,7 @@ import java.nio.channels.OverlappingFileLockException;
 public class PaloFe {
     private static final Logger LOG = LogManager.getLogger(PaloFe.class);
 
-    public static final String DORIS_HOME_DIR = System.getenv("DORIS_HOME");
+    public static final String DORIS_HOME_DIR = System.getenv("SELECTDB_HOME");
     public static final String PID_DIR = System.getenv("PID_DIR");
 
     public static void main(String[] args) {
@@ -73,7 +73,7 @@ public class PaloFe {
             Log4jConfig.foreground = true;
         }
         if (Strings.isNullOrEmpty(dorisHomeDir)) {
-            System.err.println("env DORIS_HOME is not set.");
+            System.err.println("env SELECTDB_HOME is not set.");
             return;
         }
 
