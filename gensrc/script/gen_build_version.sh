@@ -27,7 +27,7 @@
 
 set -eo pipefail
 
-build_version="trunk"
+build_version="1.2.0"
 
 unset LANG
 unset LC_CTYPE

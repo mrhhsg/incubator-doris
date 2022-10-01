@@ -61,7 +61,7 @@ public class ProfileManager {
     public static final String TOTAL_TIME = "Total";
     public static final String QUERY_TYPE = "Query Type";
     public static final String QUERY_STATE = "Query State";
-    public static final String DORIS_VERSION = "Doris Version";
+    public static final String DORIS_VERSION = "SelectDB Version";
     public static final String USER = "User";
     public static final String DEFAULT_DB = "Default Db";
     public static final String SQL_STATEMENT = "Sql Statement";
