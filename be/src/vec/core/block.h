@@ -214,6 +214,16 @@ public:
     /** Get the same block, but empty. */
     Block clone_empty() const;
 
+    void sub_block(Block& dst, const size_t offset, const size_t num_rows) const;
+
+    void truncate(const size_t length) {
+        CHECK(length <= rows());
+        for (auto& columnWithTypeAndName : data) {
+            auto col = columnWithTypeAndName.column->assume_mutable();
+            col->resize(length);
+        }
+    }
+
     Columns get_columns() const;
     void set_columns(const Columns& columns);
     Block clone_with_columns(const Columns& columns) const;

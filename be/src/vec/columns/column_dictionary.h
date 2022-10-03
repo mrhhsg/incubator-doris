@@ -194,12 +194,13 @@ public:
         auto* res_col = reinterpret_cast<vectorized::ColumnString*>(col_ptr);
         res_col->get_offsets().reserve(sel_size);
         res_col->get_chars().reserve(_dict.avg_str_len() * sel_size);
-        for (size_t i = 0; i < sel_size; i++) {
-            uint16_t n = sel[i];
-            auto& code = reinterpret_cast<T&>(_codes[n]);
-            auto value = _dict.get_value(code);
-            res_col->insert_data_without_reserve(value.ptr, value.len);
+        StringRef strings[sel_size];
+        for (size_t i = 0; i != sel_size; ++i) {
+            auto& value = _dict.get_value(_codes[sel[i]]);
+            strings[i].data = value.ptr;
+            strings[i].size = value.len;
         }
+        res_col->insert_many_strings(strings, sel_size);
         return Status::OK();
     }
 
