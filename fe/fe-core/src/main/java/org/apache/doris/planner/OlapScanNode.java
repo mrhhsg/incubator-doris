@@ -921,7 +921,7 @@ public class OlapScanNode extends ScanNode {
             for (Column col : olapTable.getSchemaByIndexId(selectedIndexId, true)) {
                 TColumn tColumn = col.toThrift();
                 col.setIndexFlag(tColumn, olapTable);
-                columnsDesc.add(tColumn);
+                //columnsDesc.add(tColumn);
                 if ((Util.showHiddenColumns() || (!Util.showHiddenColumns() && col.isVisible())) && col.isKey()) {
                     keyColumnNames.add(col.getName());
                     keyColumnTypes.add(col.getDataType().toThrift());
