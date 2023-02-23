@@ -1431,38 +1431,6 @@ public class FunctionCallExpr extends Expr {
             this.type = fn.getReturnType();
         }
 
-        Type[] childTypes = collectChildReturnTypes();
-        if ((this.type.isDate() || this.type.isDatetime()) && Config.enable_date_conversion
-                && fn.getArgs().length == childTypes.length) {
-            boolean implicitCastToDate = false;
-            for (int i = 0; i < fn.getArgs().length; i++) {
-                implicitCastToDate = Type.canCastTo(childTypes[i], fn.getArgs()[i]);
-                if (implicitCastToDate) {
-                    break;
-                }
-            }
-            if (implicitCastToDate) {
-                this.type = ScalarType.getDefaultDateType(fn.getReturnType());
-                fn.setReturnType(ScalarType.getDefaultDateType(fn.getReturnType()));
-            }
-        }
-
-        if (this.type.isDecimalV2() && Config.enable_decimal_conversion
-                && fn.getArgs().length == childTypes.length) {
-            boolean implicitCastToDecimalV3 = false;
-            for (int i = 0; i < fn.getArgs().length; i++) {
-                implicitCastToDecimalV3 = Type.canCastTo(childTypes[i], fn.getArgs()[i]);
-                if (implicitCastToDecimalV3) {
-                    break;
-                }
-            }
-            if (implicitCastToDecimalV3) {
-                this.type = ScalarType.createDecimalV3Type(fn.getReturnType().getPrecision(),
-                        ((ScalarType) fn.getReturnType()).getScalarScale());
-                fn.setReturnType(this.type);
-            }
-        }
-
         if (this.type.isDecimalV2()) {
             this.type = Type.MAX_DECIMALV2_TYPE;
             fn.setReturnType(Type.MAX_DECIMALV2_TYPE);
