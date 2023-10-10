@@ -14,6 +14,7 @@ PhysicalResultSink
 ----------------------hashJoin[LEFT_SEMI_JOIN](c.c_customer_sk = web_sales.ws_bill_customer_sk)
 ------------------------PhysicalDistribute
 --------------------------PhysicalProject
+<<<<<<< HEAD
 ----------------------------hashJoin[INNER_JOIN](customer_demographics.cd_demo_sk = c.c_current_cdemo_sk)
 ------------------------------PhysicalOlapScan[customer_demographics]
 ------------------------------PhysicalDistribute
@@ -30,12 +31,31 @@ PhysicalResultSink
 ------------------------------------------------PhysicalOlapScan[date_dim]
 ------------------------------------PhysicalDistribute
 --------------------------------------hashJoin[INNER_JOIN](c.c_current_addr_sk = ca.ca_address_sk)
+=======
+----------------------------PhysicalOlapScan[store_sales]
+--------------------------PhysicalDistribute
+----------------------------PhysicalProject
+------------------------------filter((date_dim.d_moy <= 4) and (date_dim.d_moy >= 1) and (date_dim.d_year = 2001))
+--------------------------------PhysicalOlapScan[date_dim]
+--------------------PhysicalDistribute
+----------------------PhysicalProject
+------------------------filter(($c$1 OR $c$2))
+--------------------------hashJoin[LEFT_SEMI_JOIN] hashCondition=((c.c_customer_sk = catalog_sales.cs_ship_customer_sk))otherCondition=()
+----------------------------hashJoin[LEFT_SEMI_JOIN] hashCondition=((c.c_customer_sk = web_sales.ws_bill_customer_sk))otherCondition=()
+------------------------------PhysicalProject
+--------------------------------hashJoin[INNER_JOIN] hashCondition=((customer_demographics.cd_demo_sk = c.c_current_cdemo_sk))otherCondition=()
+----------------------------------PhysicalOlapScan[customer_demographics]
+----------------------------------PhysicalDistribute
+------------------------------------PhysicalProject
+--------------------------------------hashJoin[INNER_JOIN] hashCondition=((c.c_current_addr_sk = ca.ca_address_sk))otherCondition=()
+>>>>>>> f5b826b66d ([fix](mark join) mark join column should be nullable (#24910))
 ----------------------------------------PhysicalProject
 ------------------------------------------PhysicalOlapScan[customer]
 ----------------------------------------PhysicalDistribute
 ------------------------------------------PhysicalProject
 --------------------------------------------filter(ca_county IN ('Storey County', 'Marquette County', 'Warren County', 'Cochran County', 'Kandiyohi County'))
 ----------------------------------------------PhysicalOlapScan[customer_address]
+<<<<<<< HEAD
 ------------------------PhysicalDistribute
 --------------------------PhysicalProject
 ----------------------------hashJoin[INNER_JOIN](web_sales.ws_sold_date_sk = date_dim.d_date_sk)
@@ -54,4 +74,24 @@ PhysicalResultSink
 ------------------------------PhysicalProject
 --------------------------------filter((date_dim.d_moy >= 1)(date_dim.d_moy <= 4)(date_dim.d_year = 2001))
 ----------------------------------PhysicalOlapScan[date_dim]
+=======
+------------------------------PhysicalDistribute
+--------------------------------PhysicalProject
+----------------------------------hashJoin[INNER_JOIN] hashCondition=((web_sales.ws_sold_date_sk = date_dim.d_date_sk))otherCondition=()
+------------------------------------PhysicalProject
+--------------------------------------PhysicalOlapScan[web_sales]
+------------------------------------PhysicalDistribute
+--------------------------------------PhysicalProject
+----------------------------------------filter((date_dim.d_moy <= 4) and (date_dim.d_moy >= 1) and (date_dim.d_year = 2001))
+------------------------------------------PhysicalOlapScan[date_dim]
+----------------------------PhysicalDistribute
+------------------------------PhysicalProject
+--------------------------------hashJoin[INNER_JOIN] hashCondition=((catalog_sales.cs_sold_date_sk = date_dim.d_date_sk))otherCondition=()
+----------------------------------PhysicalProject
+------------------------------------PhysicalOlapScan[catalog_sales]
+----------------------------------PhysicalDistribute
+------------------------------------PhysicalProject
+--------------------------------------filter((date_dim.d_moy <= 4) and (date_dim.d_moy >= 1) and (date_dim.d_year = 2001))
+----------------------------------------PhysicalOlapScan[date_dim]
+>>>>>>> f5b826b66d ([fix](mark join) mark join column should be nullable (#24910))
 
