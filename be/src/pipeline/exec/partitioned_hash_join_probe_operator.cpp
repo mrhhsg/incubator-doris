@@ -765,6 +765,7 @@ Status PartitionedHashJoinProbeOperatorX::get_block(RuntimeState* state, vectori
             bool wait_for_io = false;
             RETURN_IF_ERROR(_revoke_memory(state, wait_for_io));
             if (wait_for_io) {
+                local_state._shared_state->need_to_spill = true;
                 return Status::OK();
             }
         }

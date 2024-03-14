@@ -57,6 +57,7 @@ Status PartitionedHashJoinSinkLocalState::revoke_memory(RuntimeState* state) {
         auto& mutable_block = _shared_state->partitioned_build_blocks[i];
 
         if (!mutable_block || mutable_block->rows() < state->batch_size()) {
+            --_spilling_streams_count;
             continue;
         }
 
