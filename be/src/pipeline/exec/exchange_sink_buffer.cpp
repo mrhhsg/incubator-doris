@@ -66,8 +66,8 @@ void BroadcastPBlockHolderMemLimiter::acquire(BroadcastPBlockHolder& holder) {
     auto size = holder._pblock->column_values().size();
     _total_queue_buffer_size += size;
     _total_queue_blocks_count++;
-    if (_total_queue_buffer_size >= config::exchg_node_buffer_size_bytes ||
-        _total_queue_blocks_count >= config::num_broadcast_buffer) {
+    if (_total_queue_buffer_size >= _total_queue_buffer_size_limit ||
+        _total_queue_blocks_count >= _total_queue_blocks_count_limit) {
         _broadcast_dependency->block();
     }
 }
@@ -88,7 +88,7 @@ void BroadcastPBlockHolderMemLimiter::release(const BroadcastPBlockHolder& holde
 namespace pipeline {
 
 ExchangeSinkBuffer::ExchangeSinkBuffer(PUniqueId query_id, PlanNodeId dest_node_id, int send_id,
-                                       int be_number, RuntimeState* state,
+                                       PlanNodeId node_id, int be_number, RuntimeState* state,
                                        ExchangeSinkLocalState* parent)
         : HasTaskExecutionCtx(state),
           _queue_capacity(0),
@@ -96,6 +96,7 @@ ExchangeSinkBuffer::ExchangeSinkBuffer(PUniqueId query_id, PlanNodeId dest_node_
           _query_id(query_id),
           _dest_node_id(dest_node_id),
           _sender_id(send_id),
+          _node_id(node_id),
           _be_number(be_number),
           _state(state),
           _context(state->get_query_ctx()),
@@ -163,6 +164,7 @@ Status ExchangeSinkBuffer::add_block(TransmitInfo&& request) {
             _busy_channels++;
         }
         if (request.block) {
+            _parent->memory_used_counter()->update(request.block->ByteSizeLong());
             RETURN_IF_ERROR(
                     BeExecVersionManager::check_be_exec_version(request.block->be_exec_version()));
         }
@@ -201,6 +203,8 @@ Status ExchangeSinkBuffer::add_block(BroadcastTransmitInfo&& request) {
             _busy_channels++;
         }
         if (request.block_holder->get_block()) {
+            _parent->memory_used_counter()->update(
+                    request.block_holder->get_block()->ByteSizeLong());
             RETURN_IF_ERROR(BeExecVersionManager::check_be_exec_version(
                     request.block_holder->get_block()->be_exec_version()));
         }
@@ -303,6 +307,7 @@ Status ExchangeSinkBuffer::_send_rpc(InstanceLoId id) {
             }
         }
         if (request.block) {
+            _parent->memory_used_counter()->update(-request.block->ByteSizeLong());
             static_cast<void>(brpc_request->release_block());
         }
         q.pop();
@@ -386,6 +391,8 @@ Status ExchangeSinkBuffer::_send_rpc(InstanceLoId id) {
             }
         }
         if (request.block_holder->get_block()) {
+            _parent->memory_used_counter()->update(
+                    -request.block_holder->get_block()->ByteSizeLong());
             static_cast<void>(brpc_request->release_block());
         }
         broadcast_q.pop();
@@ -425,6 +432,8 @@ void ExchangeSinkBuffer::_ended(InstanceLoId id) {
 }
 
 void ExchangeSinkBuffer::_failed(InstanceLoId id, const std::string& err) {
+    LOG(INFO) << "send rpc failed, instance id: " << id << ", _dest_node_id: " << _dest_node_id
+              << ",_sender_id: " << _sender_id << ", node id: " << _node_id << ", err: " << err;
     _is_finishing = true;
     _context->cancel(Status::Cancelled(err));
     std::unique_lock<std::mutex> lock(*_instance_to_package_queue_mutex[id]);
@@ -435,8 +444,30 @@ void ExchangeSinkBuffer::_set_receiver_eof(InstanceLoId id) {
     std::unique_lock<std::mutex> lock(*_instance_to_package_queue_mutex[id]);
     _instance_to_receiver_eof[id] = true;
     _turn_off_channel(id, true);
-    std::queue<BroadcastTransmitInfo, std::list<BroadcastTransmitInfo>> empty;
-    swap(empty, _instance_to_broadcast_package_queue[id]);
+    std::queue<BroadcastTransmitInfo, std::list<BroadcastTransmitInfo>>& broadcast_q =
+            _instance_to_broadcast_package_queue[id];
+    for (; !broadcast_q.empty(); broadcast_q.pop()) {
+        if (broadcast_q.front().block_holder->get_block()) {
+            _parent->memory_used_counter()->update(
+                    -broadcast_q.front().block_holder->get_block()->ByteSizeLong());
+        }
+    }
+    {
+        std::queue<BroadcastTransmitInfo, std::list<BroadcastTransmitInfo>> empty;
+        swap(empty, broadcast_q);
+    }
+
+    std::queue<TransmitInfo, std::list<TransmitInfo>>& q = _instance_to_package_queue[id];
+    for (; !q.empty(); q.pop()) {
+        if (q.front().block) {
+            _parent->memory_used_counter()->update(-q.front().block->ByteSizeLong());
+        }
+    }
+
+    {
+        std::queue<TransmitInfo, std::list<TransmitInfo>> empty;
+        swap(empty, q);
+    }
 }
 
 bool ExchangeSinkBuffer::_is_receiver_eof(InstanceLoId id) {

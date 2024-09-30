@@ -56,6 +56,7 @@ class PipelineXLocalStateBase;
 class PipelineXSinkLocalStateBase;
 class PipelineFragmentContext;
 class PipelineTask;
+class Dependency;
 } // namespace pipeline
 
 class DescriptorTbl;
@@ -594,6 +595,15 @@ public:
         return 1;
     }
 
+    size_t minimum_operator_memory_required_bytes() const {
+        if (_query_options.__isset.minimum_operator_memory_required_kb) {
+            return _query_options.minimum_operator_memory_required_kb * 1024;
+        } else {
+            // refer other database
+            return 100 * 1024;
+        }
+    }
+
     void set_max_operator_id(int max_operator_id) { _max_operator_id = max_operator_id; }
 
     int max_operator_id() const { return _max_operator_id; }
@@ -612,7 +622,7 @@ public:
 
     vectorized::ColumnInt64* partial_update_auto_inc_column() {
         return _partial_update_auto_inc_column;
-    };
+    }
 
 private:
     Status create_error_log_file();

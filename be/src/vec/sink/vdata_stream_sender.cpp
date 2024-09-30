@@ -109,7 +109,12 @@ Status Channel<Parent>::open(RuntimeState* state) {
     _brpc_request->set_sender_id(_parent->sender_id());
     _brpc_request->set_be_number(_be_number);
 
-    _brpc_timeout_ms = std::min(3600, state->execution_timeout()) * 1000;
+    const auto& query_options = state->query_options();
+    if (query_options.__isset.query_timeout) {
+        _brpc_timeout_ms = query_options.query_timeout * 1000;
+    } else {
+        _brpc_timeout_ms = std::min(3600, state->execution_timeout()) * 1000;
+    }
 
     _serializer.set_is_local(_is_local);
 
@@ -127,6 +132,12 @@ std::shared_ptr<pipeline::Dependency> PipChannel::get_local_channel_dependency()
     }
     return Channel<pipeline::ExchangeSinkLocalState>::_local_recvr->get_local_channel_dependency(
             Channel<pipeline::ExchangeSinkLocalState>::_parent->sender_id());
+}
+
+int64_t PipChannel::mem_usage() const {
+    auto* mutable_block = Channel<pipeline::ExchangeSinkLocalState>::_serializer.get_block();
+    int64_t mem_usage = mutable_block ? mutable_block->allocated_bytes() : 0;
+    return mem_usage;
 }
 
 Status PipChannel::send_remote_block(PBlock* block, bool eos, Status exec_status) {

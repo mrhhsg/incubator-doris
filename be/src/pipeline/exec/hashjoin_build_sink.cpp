@@ -74,7 +74,7 @@ Status HashJoinBuildSinkLocalState::init(RuntimeState* state, LocalSinkStateInfo
     _build_blocks_memory_usage =
             ADD_CHILD_COUNTER_WITH_LEVEL(profile(), "BuildBlocks", TUnit::BYTES, "MemoryUsage", 1);
     _hash_table_memory_usage =
-            ADD_CHILD_COUNTER_WITH_LEVEL(profile(), "HashTable", TUnit::BYTES, "MemoryUsage", 1);
+            ADD_COUNTER_WITH_LEVEL(profile(), "HashTableMemoryUsage", TUnit::BYTES, 1);
     _build_arena_memory_usage =
             profile()->AddHighWaterMarkCounter("BuildKeyArena", TUnit::BYTES, "MemoryUsage", 1);
 
@@ -108,6 +108,36 @@ Status HashJoinBuildSinkLocalState::open(RuntimeState* state) {
     SCOPED_TIMER(_open_timer);
     RETURN_IF_ERROR(JoinBuildSinkLocalState::open(state));
     return Status::OK();
+}
+
+size_t HashJoinBuildSinkLocalState::get_reserve_mem_size(RuntimeState* state) {
+    if (!_should_build_hash_table) {
+        return 0;
+    }
+
+    if (_shared_state->build_block) {
+        return 0;
+    }
+
+    size_t size_to_reserve = 0;
+
+    if (!_build_side_mutable_block.empty()) {
+        size_to_reserve += _build_side_mutable_block.allocated_bytes();
+    }
+
+    const size_t rows = _build_side_mutable_block.rows() + state->batch_size();
+    size_t bucket_size = JoinHashTable<StringRef>::calc_bucket_size(rows);
+
+    size_to_reserve += bucket_size * sizeof(uint32_t); // JoinHashTable::first
+    size_to_reserve += rows * sizeof(uint32_t);        // JoinHashTable::next
+
+    auto& p = _parent->cast<HashJoinBuildSinkOperatorX>();
+    if (p._join_op == TJoinOp::FULL_OUTER_JOIN || p._join_op == TJoinOp::RIGHT_OUTER_JOIN ||
+        p._join_op == TJoinOp::RIGHT_ANTI_JOIN || p._join_op == TJoinOp::RIGHT_SEMI_JOIN) {
+        size_to_reserve += rows * sizeof(uint8_t); // JoinHashTable::visited
+    }
+    size_to_reserve += _evaluate_mem_usage;
+    return size_to_reserve;
 }
 
 Status HashJoinBuildSinkLocalState::close(RuntimeState* state, Status exec_status) {
@@ -170,6 +200,7 @@ Status HashJoinBuildSinkLocalState::_do_evaluate(vectorized::Block& block,
                                                  vectorized::VExprContextSPtrs& exprs,
                                                  RuntimeProfile::Counter& expr_call_timer,
                                                  std::vector<int>& res_col_ids) {
+    auto origin_size = block.allocated_bytes();
     for (size_t i = 0; i < exprs.size(); ++i) {
         int result_col_id = -1;
         // execute build column
@@ -183,6 +214,8 @@ Status HashJoinBuildSinkLocalState::_do_evaluate(vectorized::Block& block,
                 block.get_by_position(result_col_id).column->convert_to_full_column_if_const();
         res_col_ids[i] = result_col_id;
     }
+
+    _evaluate_mem_usage = block.allocated_bytes() - origin_size;
     return Status::OK();
 }
 
@@ -304,6 +337,8 @@ Status HashJoinBuildSinkLocalState::process_build_block(RuntimeState* state,
                         _mem_tracker->consume(arg.hash_table->get_byte_size() -
                                               old_hash_table_size);
                         _mem_tracker->consume(arg.serialized_keys_size(true) - old_key_size);
+                        COUNTER_SET(_hash_table_memory_usage,
+                                    int64_t(arg.hash_table->get_byte_size()));
                         return st;
                     }},
             *_shared_state->hash_table_variants, _shared_state->join_op_variants,
@@ -507,7 +542,6 @@ Status HashJoinBuildSinkOperatorX::sink(RuntimeState* state, vectorized::Block* 
     if (local_state._should_build_hash_table) {
         // If eos or have already met a null value using short-circuit strategy, we do not need to pull
         // data from probe side.
-        local_state._build_side_mem_used += in_block->allocated_bytes();
 
         if (local_state._build_side_mutable_block.empty()) {
             auto tmp_build_block = vectorized::VectorizedUtils::create_empty_columnswithtypename(
@@ -540,6 +574,8 @@ Status HashJoinBuildSinkOperatorX::sink(RuntimeState* state, vectorized::Block* 
             SCOPED_TIMER(local_state._build_side_merge_block_timer);
             RETURN_IF_ERROR(local_state._build_side_mutable_block.merge_ignore_overflow(
                     std::move(*in_block)));
+            local_state._build_side_mem_used =
+                    local_state._build_side_mutable_block.allocated_bytes();
         }
     }
 
@@ -619,6 +655,16 @@ Status HashJoinBuildSinkOperatorX::sink(RuntimeState* state, vectorized::Block* 
     }
 
     return Status::OK();
+}
+
+size_t HashJoinBuildSinkOperatorX::get_reserve_mem_size(RuntimeState* state) {
+    auto& local_state = get_local_state(state);
+    return local_state.get_reserve_mem_size(state);
+}
+
+size_t HashJoinBuildSinkOperatorX::get_memory_usage(RuntimeState* state) const {
+    auto& local_state = get_local_state(state);
+    return local_state._mem_tracker->consumption();
 }
 
 } // namespace doris::pipeline

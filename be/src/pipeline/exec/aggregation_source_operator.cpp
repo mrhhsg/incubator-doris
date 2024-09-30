@@ -22,18 +22,15 @@
 
 #include "common/exception.h"
 #include "pipeline/exec/operator.h"
+#include "runtime/thread_context.h"
+#include "util/runtime_profile.h"
 #include "vec/exprs/vectorized_agg_fn.h"
+#include "vec/exprs/vexpr_fwd.h"
 
 namespace doris::pipeline {
 #include "common/compile_check_begin.h"
 
-AggLocalState::AggLocalState(RuntimeState* state, OperatorXBase* parent)
-        : Base(state, parent),
-          _get_results_timer(nullptr),
-          _serialize_result_timer(nullptr),
-          _hash_table_iterate_timer(nullptr),
-          _insert_keys_to_column_timer(nullptr),
-          _serialize_data_timer(nullptr) {}
+AggLocalState::AggLocalState(RuntimeState* state, OperatorXBase* parent) : Base(state, parent) {}
 
 Status AggLocalState::init(RuntimeState* state, LocalStateInfo& info) {
     RETURN_IF_ERROR(Base::init(state, info));
@@ -49,28 +46,37 @@ Status AggLocalState::init(RuntimeState* state, LocalStateInfo& info) {
     _deserialize_data_timer = ADD_TIMER(Base::profile(), "DeserializeAndMergeTime");
     _hash_table_compute_timer = ADD_TIMER(Base::profile(), "HashTableComputeTime");
     _hash_table_emplace_timer = ADD_TIMER(Base::profile(), "HashTableEmplaceTime");
-    _hash_table_input_counter = ADD_COUNTER(Base::profile(), "HashTableInputCount", TUnit::UNIT);
+    _hash_table_input_counter =
+            ADD_COUNTER_WITH_LEVEL(Base::profile(), "HashTableInputCount", TUnit::UNIT, 1);
+    _hash_table_memory_usage =
+            ADD_COUNTER_WITH_LEVEL(Base::profile(), "HashTableMemoryUsage", TUnit::BYTES, 1);
+    _hash_table_size_counter =
+            ADD_COUNTER_WITH_LEVEL(Base::profile(), "HashTableSize", TUnit::UNIT, 1);
 
     auto& p = _parent->template cast<AggSourceOperatorX>();
     if (p._without_key) {
         if (p._needs_finalize) {
-            _executor.get_result = std::bind<Status>(&AggLocalState::_get_without_key_result, this,
-                                                     std::placeholders::_1, std::placeholders::_2,
-                                                     std::placeholders::_3);
+            _executor.get_result = [this](RuntimeState* state, vectorized::Block* block,
+                                          bool* eos) {
+                return _get_without_key_result(state, block, eos);
+            };
         } else {
-            _executor.get_result = std::bind<Status>(&AggLocalState::_serialize_without_key, this,
-                                                     std::placeholders::_1, std::placeholders::_2,
-                                                     std::placeholders::_3);
+            _executor.get_result = [this](RuntimeState* state, vectorized::Block* block,
+                                          bool* eos) {
+                return _serialize_without_key(state, block, eos);
+            };
         }
     } else {
         if (p._needs_finalize) {
-            _executor.get_result = std::bind<Status>(
-                    &AggLocalState::_get_with_serialized_key_result, this, std::placeholders::_1,
-                    std::placeholders::_2, std::placeholders::_3);
+            _executor.get_result = [this](RuntimeState* state, vectorized::Block* block,
+                                          bool* eos) {
+                return _get_with_serialized_key_result(state, block, eos);
+            };
         } else {
-            _executor.get_result = std::bind<Status>(
-                    &AggLocalState::_serialize_with_serialized_key_result, this,
-                    std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+            _executor.get_result = [this](RuntimeState* state, vectorized::Block* block,
+                                          bool* eos) {
+                return _serialize_with_serialized_key_result(state, block, eos);
+            };
         }
     }
 
@@ -446,11 +452,11 @@ AggSourceOperatorX::AggSourceOperatorX(ObjectPool* pool, const TPlanNode& tnode,
 Status AggSourceOperatorX::get_block(RuntimeState* state, vectorized::Block* block, bool* eos) {
     auto& local_state = get_local_state(state);
     SCOPED_TIMER(local_state.exec_time_counter());
+    SCOPED_PEAK_MEM(&local_state._estimate_memory_usage);
     RETURN_IF_ERROR(local_state._executor.get_result(state, block, eos));
     local_state.make_nullable_output_key(block);
     // dispose the having clause, should not be execute in prestreaming agg
-    RETURN_IF_ERROR(vectorized::VExprContext::filter_block(local_state._conjuncts, block,
-                                                           block->columns()));
+    RETURN_IF_ERROR(local_state.filter_block(local_state._conjuncts, block, block->columns()));
     local_state.do_agg_limit(block, eos);
     return Status::OK();
 }
@@ -488,6 +494,7 @@ void AggLocalState::make_nullable_output_key(vectorized::Block* block) {
 template <bool limit>
 Status AggLocalState::merge_with_serialized_key_helper(vectorized::Block* block) {
     SCOPED_TIMER(_merge_timer);
+    SCOPED_PEAK_MEM(&_estimate_memory_usage);
 
     size_t key_size = Base::_shared_state->probe_expr_ctxs.size();
     vectorized::ColumnRawPtrs key_columns(key_size);
@@ -630,6 +637,11 @@ void AggLocalState::_emplace_into_hash_table(vectorized::AggregateDataPtr* place
                            }
 
                            COUNTER_UPDATE(_hash_table_input_counter, num_rows);
+                           COUNTER_SET(_hash_table_memory_usage,
+                                       static_cast<int64_t>(
+                                               agg_method.hash_table->get_buffer_size_in_bytes()));
+                           COUNTER_SET(_hash_table_size_counter,
+                                       static_cast<int64_t>(agg_method.hash_table->size()));
                        }},
                _shared_state->agg_data->method_variant);
 }

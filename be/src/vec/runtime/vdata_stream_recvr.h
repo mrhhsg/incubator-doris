@@ -69,7 +69,8 @@ class VDataStreamRecvr;
 class VDataStreamRecvr : public HasTaskExecutionCtx {
 public:
     class SenderQueue;
-    VDataStreamRecvr(VDataStreamMgr* stream_mgr, RuntimeState* state, const RowDescriptor& row_desc,
+    VDataStreamRecvr(VDataStreamMgr* stream_mgr, pipeline::ExchangeLocalState* parent,
+                     RuntimeState* state, const RowDescriptor& row_desc,
                      const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id,
                      int num_senders, bool is_merging, RuntimeProfile* profile);
 
@@ -114,11 +115,15 @@ public:
 
     std::shared_ptr<pipeline::Dependency> get_local_channel_dependency(int sender_id);
 
+    void set_low_memory_mode() { _sender_queue_mem_limit = 1012 * 1024; }
+
 private:
     friend struct BlockSupplierSortCursorImpl;
 
     // DataStreamMgr instance used to create this recvr. (Not owned)
     VDataStreamMgr* _mgr = nullptr;
+
+    pipeline::ExchangeLocalState* _parent = nullptr;
 
     QueryThreadContext _query_thread_context;
 
@@ -137,7 +142,7 @@ private:
     std::unique_ptr<MemTracker> _mem_tracker;
     // Managed by object pool
     std::vector<SenderQueue*> _sender_queues;
-    size_t _sender_queue_mem_limit;
+    std::atomic<size_t> _sender_queue_mem_limit;
 
     std::unique_ptr<VSortedRunMerger> _merger;
 
@@ -152,8 +157,6 @@ private:
     RuntimeProfile::Counter* _data_arrival_timer = nullptr;
     RuntimeProfile::Counter* _decompress_timer = nullptr;
     RuntimeProfile::Counter* _decompress_bytes = nullptr;
-    RuntimeProfile::Counter* _memory_usage_counter = nullptr;
-    RuntimeProfile::Counter* _peak_memory_usage_counter = nullptr;
 
     // Number of rows received
     RuntimeProfile::Counter* _rows_produced_counter = nullptr;

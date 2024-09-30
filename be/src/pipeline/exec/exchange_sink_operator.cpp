@@ -135,7 +135,8 @@ Status ExchangeSinkLocalState::open(RuntimeState* state) {
 
     if (!only_local_exchange) {
         _sink_buffer = std::make_unique<ExchangeSinkBuffer>(id, p._dest_node_id, _sender_id,
-                                                            _state->be_number(), state, this);
+                                                            _parent->node_id(), _state->be_number(),
+                                                            state, this);
         register_channels(_sink_buffer.get());
         _queue_dependency = Dependency::create_shared(_parent->operator_id(), _parent->node_id(),
                                                       "ExchangeSinkQueueDependency", true);
@@ -147,7 +148,6 @@ Status ExchangeSinkLocalState::open(RuntimeState* state) {
         !only_local_exchange) {
         _broadcast_dependency = Dependency::create_shared(
                 _parent->operator_id(), _parent->node_id(), "BroadcastDependency", true);
-        _sink_buffer->set_broadcast_dependency(_broadcast_dependency);
         _broadcast_pb_mem_limiter =
                 vectorized::BroadcastPBlockHolderMemLimiter::create_shared(_broadcast_dependency);
     } else if (local_size > 0) {
@@ -380,6 +380,11 @@ Status ExchangeSinkOperatorX::sink(RuntimeState* state, vectorized::Block* block
         return Status::EndOfFile("all data stream channels EOF");
     }
 
+    // When `local_state.only_local_exchange` the `sink_buffer` is nullptr.
+    if (state->get_query_ctx()->low_memory_mode() && local_state._sink_buffer != nullptr) {
+        local_state._sink_buffer->set_low_memory_mode();
+    }
+
     if (_part_type == TPartitionType::UNPARTITIONED || local_state.channels.size() == 1) {
         // 1. serialize depends on it is not local exchange
         // 2. send block
@@ -412,6 +417,9 @@ Status ExchangeSinkOperatorX::sink(RuntimeState* state, vectorized::Block* block
                         block_holder->reset_block();
                     }
 
+                    if (state->get_query_ctx()->low_memory_mode()) {
+                        local_state._broadcast_pb_mem_limiter->set_low_memory_mode();
+                    }
                     local_state._broadcast_pb_mem_limiter->acquire(*block_holder);
 
                     for (auto* channel : local_state.channels) {
@@ -461,6 +469,10 @@ Status ExchangeSinkOperatorX::sink(RuntimeState* state, vectorized::Block* block
             RETURN_IF_ERROR(
                     local_state._partitioner->do_partitioning(state, block, _mem_tracker.get()));
         }
+        int64_t old_channel_mem_usage = 0;
+        for (const auto& channel : local_state.channels) {
+            old_channel_mem_usage += channel->mem_usage();
+        }
         if (_part_type == TPartitionType::HASH_PARTITIONED) {
             RETURN_IF_ERROR(channel_add_rows(
                     state, local_state.channels, local_state._partition_count,
@@ -470,7 +482,16 @@ Status ExchangeSinkOperatorX::sink(RuntimeState* state, vectorized::Block* block
                     state, local_state.channel_shared_ptrs, local_state._partition_count,
                     local_state._partitioner->get_channel_ids().get<uint32_t>(), rows, block, eos));
         }
+        int64_t new_channel_mem_usage = 0;
+        for (const auto& channel : local_state.channels) {
+            new_channel_mem_usage += channel->mem_usage();
+        }
+        local_state.memory_used_counter()->update(new_channel_mem_usage - old_channel_mem_usage);
     } else if (_part_type == TPartitionType::TABLET_SINK_SHUFFLE_PARTITIONED) {
+        int64_t old_channel_mem_usage = 0;
+        for (const auto& channel : local_state.channels) {
+            old_channel_mem_usage += channel->mem_usage();
+        }
         // check out of limit
         RETURN_IF_ERROR(local_state._send_new_partition_batch());
         std::shared_ptr<vectorized::Block> convert_block = std::make_shared<vectorized::Block>();
@@ -506,7 +527,16 @@ Status ExchangeSinkOperatorX::sink(RuntimeState* state, vectorized::Block* block
         // when send data we still use block
         RETURN_IF_ERROR(channel_add_rows_with_idx(state, local_state.channels, num_channels,
                                                   channel2rows, block, eos));
+        int64_t new_channel_mem_usage = 0;
+        for (const auto& channel : local_state.channels) {
+            new_channel_mem_usage += channel->mem_usage();
+        }
+        local_state.memory_used_counter()->update(new_channel_mem_usage - old_channel_mem_usage);
     } else if (_part_type == TPartitionType::TABLE_SINK_HASH_PARTITIONED) {
+        int64_t old_channel_mem_usage = 0;
+        for (const auto& channel : local_state.channels) {
+            old_channel_mem_usage += channel->mem_usage();
+        }
         {
             SCOPED_TIMER(local_state._split_block_hash_compute_timer);
             RETURN_IF_ERROR(
@@ -517,6 +547,11 @@ Status ExchangeSinkOperatorX::sink(RuntimeState* state, vectorized::Block* block
         RETURN_IF_ERROR(channel_add_rows_with_idx(
                 state, local_state.channels, local_state.channels.size(), assignments, block, eos));
 
+        int64_t new_channel_mem_usage = 0;
+        for (const auto& channel : local_state.channels) {
+            new_channel_mem_usage += channel->mem_usage();
+        }
+        local_state.memory_used_counter()->update(new_channel_mem_usage - old_channel_mem_usage);
     } else if (_part_type == TPartitionType::TABLE_SINK_RANDOM_PARTITIONED) {
         // Control the number of channels according to the flow, thereby controlling the number of table sink writers.
         // 1. select channel
