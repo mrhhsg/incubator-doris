@@ -24,6 +24,9 @@ import org.apache.doris.common.FormatOptions;
 import org.apache.doris.common.Id;
 import org.apache.doris.common.IdGenerator;
 import org.apache.doris.common.Pair;
+import org.apache.doris.datasource.mvcc.MvccSnapshot;
+import org.apache.doris.datasource.mvcc.MvccTable;
+import org.apache.doris.datasource.mvcc.MvccTableInfo;
 import org.apache.doris.nereids.hint.Hint;
 import org.apache.doris.nereids.memo.Group;
 import org.apache.doris.nereids.rules.analysis.ColumnAliasGenerator;
@@ -126,6 +129,8 @@ public class StatementContext implements Closeable {
     private final IdGenerator<PlaceholderId> placeHolderIdGenerator = PlaceholderId.createGenerator();
     // relation id to placeholders for prepared statement, ordered by placeholder id
     private final Map<PlaceholderId, Expression> idToPlaceholderRealExpr = new TreeMap<>();
+    // map placeholder id to comparison slot, which will used to replace conjuncts directly
+    private final Map<PlaceholderId, SlotReference> idToComparisonSlot = new TreeMap<>();
 
     // collect all hash join conditions to compute node connectivity in join graph
     private final List<Expression> joinFilters = new ArrayList<>();
@@ -170,6 +175,10 @@ public class StatementContext implements Closeable {
     private List<PlannerHook> plannerHooks = new ArrayList<>();
 
     private String disableJoinReorderReason;
+
+    private boolean privChecked;
+
+    private final Map<MvccTableInfo, MvccSnapshot> snapshots = Maps.newHashMap();
 
     public StatementContext() {
         this(ConnectContext.get(), null, 0);
@@ -360,6 +369,10 @@ public class StatementContext implements Closeable {
         return idToPlaceholderRealExpr;
     }
 
+    public Map<PlaceholderId, SlotReference> getIdToComparisonSlot() {
+        return idToComparisonSlot;
+    }
+
     public Map<CTEId, List<Pair<Multimap<Slot, Slot>, Group>>> getCteIdToConsumerGroup() {
         return cteIdToConsumerGroup;
     }
@@ -505,6 +518,32 @@ public class StatementContext implements Closeable {
         this.plannerHooks.add(plannerHook);
     }
 
+    /**
+     * Load snapshot information of mvcc
+     *
+     * @param tables Tables used in queries
+     */
+    public void loadSnapshots(Map<List<String>, TableIf> tables) {
+        if (tables == null) {
+            return;
+        }
+        for (TableIf tableIf : tables.values()) {
+            if (tableIf instanceof MvccTable) {
+                snapshots.put(new MvccTableInfo(tableIf), ((MvccTable) tableIf).loadSnapshot());
+            }
+        }
+    }
+
+    /**
+     * Obtain snapshot information of mvcc
+     *
+     * @param mvccTable mvccTable
+     * @return MvccSnapshot
+     */
+    public MvccSnapshot getSnapshot(MvccTable mvccTable) {
+        return snapshots.get(new MvccTableInfo(mvccTable));
+    }
+
     private static class CloseableResource implements Closeable {
         public final String resourceName;
         public final String threadName;
@@ -567,5 +606,13 @@ public class StatementContext implements Closeable {
 
     public void setDisableJoinReorderReason(String disableJoinReorderReason) {
         this.disableJoinReorderReason = disableJoinReorderReason;
+    }
+
+    public boolean isPrivChecked() {
+        return privChecked;
+    }
+
+    public void setPrivChecked(boolean privChecked) {
+        this.privChecked = privChecked;
     }
 }

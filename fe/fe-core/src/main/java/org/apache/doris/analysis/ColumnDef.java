@@ -134,7 +134,8 @@ public class ColumnDef {
         }
 
         public boolean isCurrentTimeStamp() {
-            return "CURRENT_TIMESTAMP".equals(value) && NOW.equals(defaultValueExprDef.getExprName());
+            return "CURRENT_TIMESTAMP".equals(value) && defaultValueExprDef != null
+                    && NOW.equals(defaultValueExprDef.getExprName());
         }
 
         public boolean isCurrentTimeStampWithPrecision() {
@@ -644,6 +645,12 @@ public class ColumnDef {
                 break;
             case BOOLEAN:
                 new BoolLiteral(defaultValue);
+                break;
+            case IPV4:
+                new IPv4Literal(defaultValue);
+                break;
+            case IPV6:
+                new IPv6Literal(defaultValue);
                 break;
             default:
                 throw new AnalysisException("Unsupported type: " + type);

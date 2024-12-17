@@ -299,7 +299,7 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
 }
 
 std::weak_ptr<QueryContext> RuntimeState::get_query_ctx_weak() {
-    return _exec_env->fragment_mgr()->get_or_erase_query_ctx_with_lock(_query_ctx->query_id());
+    return _exec_env->fragment_mgr()->get_query_ctx(_query_ctx->query_id());
 }
 
 void RuntimeState::init_mem_trackers(const std::string& name, const TUniqueId& id) {
@@ -360,7 +360,7 @@ Status RuntimeState::create_error_log_file() {
             // https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_basic_err_packet.html
             // shorten the path as much as possible to prevent the length of the presigned URL from
             // exceeding the MySQL error packet size limit
-            ss << "error_log/" << _import_label << "_" << std::hex << _fragment_instance_id.hi;
+            ss << "error_log/" << std::hex << _query_id.hi;
             _s3_error_log_file_path = ss.str();
         }
     }

@@ -33,6 +33,7 @@
 #include "util/uuid_generator.h"
 
 namespace doris {
+#include "common/compile_check_begin.h"
 using namespace ErrorCode;
 
 bvar::Adder<uint64_t> cumu_output_size("cumu_compaction", "output_size");
@@ -91,6 +92,10 @@ PREPARE_TRY_AGAIN:
             // plus 1 to skip the delete version.
             // NOTICE: after that, the cumulative point may be larger than max version of this tablet, but it doesn't matter.
             update_cumulative_point();
+            if (!config::enable_sleep_between_delete_cumu_compaction) {
+                st = Status::Error<CUMULATIVE_NO_SUITABLE_VERSION>(
+                        "_last_delete_version.first not equal to -1");
+            }
         }
         return st;
     }
@@ -263,6 +268,10 @@ Status CloudCumulativeCompaction::modify_rowsets() {
     compaction_job->add_output_versions(_output_rowset->end_version());
     compaction_job->add_txn_id(_output_rowset->txn_id());
     compaction_job->add_output_rowset_ids(_output_rowset->rowset_id().to_string());
+    compaction_job->set_index_size_input_rowsets(_input_rowsets_index_size);
+    compaction_job->set_segment_size_input_rowsets(_input_rowsets_data_size);
+    compaction_job->set_index_size_output_rowsets(_output_rowset->index_disk_size());
+    compaction_job->set_segment_size_output_rowsets(_output_rowset->data_disk_size());
 
     DBUG_EXECUTE_IF("CloudCumulativeCompaction::modify_rowsets.enable_spin_wait", {
         LOG(INFO) << "CloudCumulativeCompaction::modify_rowsets.enable_spin_wait, start";
@@ -486,8 +495,10 @@ Status CloudCumulativeCompaction::pick_rowsets_to_compact() {
     }
 
     int64_t max_score = config::cumulative_compaction_max_deltas;
-    auto process_memory_usage = doris::GlobalMemoryArbitrator::process_memory_usage();
-    bool memory_usage_high = process_memory_usage > MemInfo::soft_mem_limit() * 0.8;
+    double process_memory_usage =
+            static_cast<double>(doris::GlobalMemoryArbitrator::process_memory_usage());
+    bool memory_usage_high =
+            process_memory_usage > static_cast<double>(MemInfo::soft_mem_limit()) * 0.8;
     if (cloud_tablet()->last_compaction_status.is<ErrorCode::MEM_LIMIT_EXCEEDED>() ||
         memory_usage_high) {
         max_score = std::max(config::cumulative_compaction_max_deltas /
@@ -617,4 +628,5 @@ void CloudCumulativeCompaction::do_lease() {
     }
 }
 
+#include "common/compile_check_end.h"
 } // namespace doris
