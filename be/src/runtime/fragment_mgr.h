@@ -154,11 +154,6 @@ private:
 
     std::shared_ptr<QueryContext> _get_or_erase_query_ctx(const TUniqueId& query_id);
 
-    struct BrpcItem {
-        TNetworkAddress network_address;
-        std::vector<std::weak_ptr<QueryContext>> queries;
-    };
-
     template <typename Param>
     void _set_scan_concurrency(const Param& params, QueryContext* query_ctx);
 
