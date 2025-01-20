@@ -22,6 +22,7 @@
 #include <gen_cpp/PlanNodes_types.h>
 #include <gen_cpp/Types_types.h>
 #include <gen_cpp/internal_service.pb.h>
+#include <glog/logging.h>
 
 #include <algorithm>
 // IWYU pragma: no_include <bits/chrono.h>
@@ -1009,6 +1010,9 @@ void IRuntimeFilter::insert_batch(const vectorized::ColumnPtr column, size_t sta
 Status IRuntimeFilter::publish(RuntimeState* state, bool publish_local) {
     DCHECK(is_producer());
 
+    CHECK(!_published);
+    _published = true;
+
     auto send_to_remote_targets = [&](IRuntimeFilter* filter, uint64_t local_merge_time) {
         TNetworkAddress addr;
         DCHECK(_state != nullptr);
@@ -1299,6 +1303,9 @@ PrimitiveType IRuntimeFilter::column_type() const {
 
 void IRuntimeFilter::signal() {
     DCHECK(is_consumer());
+
+    CHECK(!_signaled);
+    _signaled = true;
 
     if (!_wrapper->is_ignored() && !_wrapper->is_disabled() && _wrapper->is_bloomfilter() &&
         !_wrapper->get_bloomfilter()->inited()) {

@@ -24,6 +24,7 @@
 #include <gen_cpp/PlanNodes_types.h>
 #include <gen_cpp/internal_service.pb.h>
 #include <gen_cpp/types.pb.h>
+#include <glog/logging.h>
 
 #include <ostream>
 #include <string>
@@ -369,7 +370,7 @@ Status RuntimeFilterMergeControllerEntity::merge(std::weak_ptr<QueryContext> que
         RETURN_IF_ERROR(IRuntimeFilter::create_wrapper(&params, holder.getHandle()));
 
         RETURN_IF_ERROR(cnt_val->filter->merge_from(holder.getHandle()->get()));
-
+        CHECK(!cnt_val->arrive_id.contains(UniqueId(request->fragment_instance_id())));
         cnt_val->arrive_id.insert(UniqueId(request->fragment_instance_id()));
         merged_size = cnt_val->arrive_id.size();
         // TODO: avoid log when we had acquired a lock

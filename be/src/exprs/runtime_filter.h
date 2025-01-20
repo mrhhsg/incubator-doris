@@ -429,6 +429,8 @@ protected:
     std::shared_ptr<pipeline::CountedFinishDependency> _dependency;
 
     bool _enable_fixed_len_to_uint32_v2 = false;
+    bool _published = false;
+    bool _signaled = false;
 };
 
 // avoid expose RuntimePredicateWrapper
